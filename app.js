@@ -1,3 +1,4 @@
+
 // ====================================================================
 // 1. VARIABLE DECLARATIONS (DOM Elements and ArcGIS Imports)
 // ====================================================================
@@ -223,8 +224,13 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
                 `;
                 document.getElementById('pointsInfo').innerHTML = contentHTML;
                 featureNode.style.display = "block";
+                if (window.innerWidth < 850) {
+                featureNode.style.width= "80vw";
+                featureNode.style.zindex="1001";
+                } else {
 				featureNode.style.width= "25vw";
 				viewElement.style.width="75vw";
+				}
 				collapseIcon.style.display = "block";
 				expandIcon.style.display = "none";
 				$('#pointsCounter').tab('show');
@@ -240,8 +246,13 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
         debounceQuery(viewElement.extent);
         // Show/expand sidebar when search input starts
         featureNode.style.display = "block";
-        featureNode.style.width= "25vw";
-        viewElement.style.width="75vw";
+        if (window.innerWidth < 850) {
+                featureNode.style.width= "80vw";
+                featureNode.style.zindex="1001";
+                } else {
+				featureNode.style.width= "25vw";
+				viewElement.style.width="75vw";
+				}
         collapseIcon.style.display = "block";
         expandIcon.style.display = "none";
         searchButton.innerHTML= "Clear";
@@ -313,8 +324,13 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
                     
                     // Show/expand sidebar
                     featureNode.style.display = "block";
-                    featureNode.style.width= "25vw";
-                    viewElement.style.width="75vw";
+                    if (window.innerWidth < 850) {
+                featureNode.style.width= "80vw";
+                featureNode.style.zindex="1001";
+                } else {
+				featureNode.style.width= "25vw";
+				viewElement.style.width="75vw";
+				}
                     collapseIcon.style.display = "block";
                     expandIcon.style.display = "none";
                     
@@ -655,8 +671,13 @@ function displayResults(results) {
             
     // Show/expand the sidebar and display map info
     featureNode.style.display = "block";
-    featureNode.style.width= "25vw";
-    viewElement.style.width="75vw";
+    if (window.innerWidth < 850) {
+                featureNode.style.width= "80vw";
+                featureNode.style.zindex="1001";
+                } else {
+				featureNode.style.width= "25vw";
+				viewElement.style.width="75vw";
+				}
     mapsInfo.innerHTML = `<h3>${mapPrefix.mapyear ?? '[date unknown]'} ${mapPrefix.title ?? '[untitled]'}</h3>
         <b>Title:</b> ${mapPrefix.title ?? '[untitled]'}<br>
         <b>Date:</b> ${date ?? `[unknown]`}<br>
