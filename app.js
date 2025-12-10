@@ -1,4 +1,3 @@
-
 // ====================================================================
 // 1. VARIABLE DECLARATIONS (DOM Elements and ArcGIS Imports)
 // ====================================================================
@@ -46,6 +45,7 @@ let clickedGraphic = null; // Reference to the last clicked graphic on the map
 let currentHighlight = null; // Reference to the current highlight graphic
 let tileLayer; // Variable to hold the dynamically loaded TileLayer
 let pointsLayer;
+const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
 
 //See if any variable is null
 function createStringIfNotNull(...variables) {
@@ -92,9 +92,9 @@ const sizeVV = {
     stops: [
         { size: 12, value: 70 },
         { size: 9, value: 564 },
-        { size: 5, value: 4513 },
-        { size: 4, value: 36111 },
-        { size: 2, value: 144447},
+        { size: 4, value: 4513 },
+        { size: 2, value: 36111 },
+        { size: 1, value: 144447},
         { size: 1, value: 4622324},
     ],
 };
@@ -113,7 +113,7 @@ const points = {
         yoffset: 0,
         outline: {
             color: "#bfa87c",
-            width: 1
+            width: 0.5
         }
     }
 };
@@ -126,10 +126,13 @@ const points = {
 viewElement.addEventListener("arcgisViewReadyChange", () => {
     // === Debounce Function and Map Extent Watcher ===
     
-    // Watch map extent changes (pan/zoom) to update the map list dynamically
-    viewElement.view.watch("extent", (extent) => {
-        debounceQuery(extent);
-    });
+// Watch map extent changes (pan/zoom) to update the map list dynamically
+reactiveUtils.watch(
+  () => viewElement.view.extent, 
+  (extent) => {
+    debounceQuery(extent);
+  }, 
+);
 
     // A simple debounce function to limit how often a query is called during pan/zoom
     let timeout;
@@ -145,8 +148,8 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
     
     // Initialize the FeatureLayer for the Sanborn 1902 points
     pointsLayer = new FeatureLayer({
-        url: "https://lyre.cofc.edu/server/rest/services/shoc/pl_sanborn1902/FeatureServer/0",
-        outFields: ["prime_material", "function_prime", "place_descript", "orig_address_no", "orig_address_street", "orig_city", "place_source", "source_year"],
+        url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points,
     });
     
@@ -177,7 +180,7 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
         // Query the feature to get geometry and attributes for centering/display
         pointsLayer.queryFeatures({
             where: `OBJECTID = ${objectId}`,
-            outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID"],
+            outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
             returnGeometry: true
         }).then(results => {
             if (results.features.length > 0) {
@@ -198,6 +201,9 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
             	const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
     				.filter(part => part) 
    					.join(" ");
+   				const currConcatAddress = [attributes.curr_address_no, attributes.curr_address_street]
+    				.filter(part => part) 
+   					.join(" ");
                	const contentTitle = createStringIfNotNull(`<h3>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h3>`);
         		const sourceData = [
     				attributes.source_year ?? '', 
@@ -208,8 +214,13 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
         		const altTitle = `<h3>${attributes.place_descript}</h3>`;
         		const muni = createStringIfNotNull(`<b>Municipality:</b> `,attributes.orig_city,`<br>`);
         		const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,attributes.prime_material,`<br>`);
+        		const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,attributes.add_material,`<br>`);
         		const primFunc = createStringIfNotNull(`<b>Primary Function:</b> `,attributes.function_prime,`<br>`);
+        		const secFunc = createStringIfNotNull(`<b>Secondary Function:</b> `,attributes.function_second,`<br>`);
         		const placeDesc = createStringIfNotNull(`<b>Place Description:</b> `,attributes.place_descript,`<br>`);
+        		const max_stories = createStringIfNotNull(`<b>Max Number of Stories:</b> `,attributes.max_stories,`<br>`);
+        		const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
+        		const mapURL = attributes.map_url;
             	
                 // Populate the pointsInfo div
                 const contentHTML = `
@@ -218,9 +229,17 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
                 	${origAdd ?? ``}
                     ${muni ?? ``}
                     ${primMat ?? ``}
+                    ${secMat ?? ``}
                     ${primFunc ?? ``}
+                    ${secFunc ?? ``}
                     ${placeDesc ?? ``}
-                    <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a>
+                    ${max_stories ?? ``}
+                    ${currAdd ?? ``}
+                    <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
+                    <a href="${mapURL}">View Source Map</a>
+                    <hr>
+                    <h4>At This Place</h4>
+                    <p>No results/search doesn't work yet</p>
                 `;
                 document.getElementById('pointsInfo').innerHTML = contentHTML;
                 featureNode.style.display = "block";
@@ -277,6 +296,9 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
                 const concatAddress = [prefix.orig_address_no, prefix.orig_address_street]
     				.filter(part => part) 
    					.join(" ");
+   				const currConcatAddress = [prefix.curr_address_no, prefix.curr_address_street]
+    				.filter(part => part) 
+   					.join(" ");
                 const sourceData = [
     				prefix.source_year ?? '', 
     				prefix.place_source ?? ''
@@ -287,9 +309,14 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
 				const altTitle = `<h3>${prefix.place_descript}</h3>`;
 				const muni = createStringIfNotNull(`<b>Municipality:</b> `,prefix.orig_city,`<br>`);
 				const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,prefix.prime_material,`<br>`);
+				const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,prefix.add_material,`<br>`);
 				const primFunc = createStringIfNotNull(`<b>Primary Function:</b> `,prefix.function_prime,`<br>`);
+				const secFunc = createStringIfNotNull(`<b>Secondary Function:</b> `,prefix.function_second,`<br>`);
 				const placeDesc = createStringIfNotNull(`<b>Place Description:</b> `,prefix.place_descript,`<br>`);
-                
+				const max_stories = createStringIfNotNull(`<b>Max Number of Stories:</b> `,prefix.max_stories,`<br>`);
+        		const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
+        		const mapURL = prefix.map_url;
+				
                 // Clear the previous highlight
                 if (currentHighlight) {
                     currentHighlight.remove();
@@ -312,13 +339,21 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
 					
                     const contentHTML = `
                     	${contentTitle ?? altTitle}
-                    	${sourcePlat ?? ``}
-                		${origAdd ?? ``}
-                    	${muni ?? ``}
-                    	${primMat ?? ``}
-                    	${primFunc ?? ``}
-                    	${placeDesc ?? ``}
-                    	<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a>
+                    ${sourcePlat ?? ``}
+                	${origAdd ?? ``}
+                    ${muni ?? ``}
+                    ${primMat ?? ``}
+                    ${secMat ?? ``}
+                    ${primFunc ?? ``}
+                    ${secFunc ?? ``}
+                    ${placeDesc ?? ``}
+                    ${max_stories ?? ``}
+                    ${currAdd ?? ``}
+                    <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
+                    <a href="${mapURL}">View Source Map</a>
+                    <hr>
+                    <h4>At This Place</h4>
+                    <p>No results/search doesn't work yet</p>
                     `;
                     pointsInfo.innerHTML = contentHTML;
                     
@@ -514,15 +549,17 @@ function queryPoints(searchText) {
             UPPER(orig_address_street) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(prime_material) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(function_prime) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(function_second) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(function_prime) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(place_descript) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(orig_address_no || ' ' || orig_address_street) LIKE '%${searchText.toUpperCase()}%'
         )`;
     }
     
     // Query points to populate the list
-    viewElement.map.layers.find(layer => layer.url.includes("pl_sanborn1902")).queryFeatures({
+    viewElement.map.layers.find(layer => layer.url.includes("places")).queryFeatures({
         where: whereClause,
-        outFields: ["orig_address_no", "orig_address_street", "place_descript", "place_source", "source_year", "OBJECTID"],
+        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         returnGeometry: false
     }).then(results => {
         // Sort features alphabetically by address
@@ -562,6 +599,20 @@ function queryPoints(searchText) {
         console.error("Error querying points:", error);
     });
 }
+//	Listener for clicking the source map link in the points info tab
+pointsInfo.addEventListener("click", (event) => {
+    const clickedLi = event.target.closest('a');
+
+    if (!clickedLi) {
+        return;
+    }
+
+    // Update the whereClause with the selected map's service URL condition
+    whereClause = clickedLi.getAttribute('value');
+
+    // Load the selected historic map
+    queryFeatureLayer(viewElement.extent);
+});
 
 // Listener for clicking a map in the results list
 resultsList.addEventListener("click", (event) => {
@@ -635,7 +686,7 @@ function displayResults(results) {
     }
     
     // Remove the points layer temporarily for correct Z-ordering
-    const existingPointsLayer = viewElement.map.layers.find(layer => layer.url && layer.url.includes("pl_sanborn1902"));
+    const existingPointsLayer = viewElement.map.layers.find(layer => layer.url && layer.url.includes("places"));
     if (existingPointsLayer) {
     	const isPointsVisible = existingPointsLayer.visible; 
         viewElement.map.remove(existingPointsLayer);
@@ -693,8 +744,8 @@ function displayResults(results) {
 
     // Re-add the points layer on top of the tile layer (at index 1)
     const newPointsLayer = new FeatureLayer({
-        url: "https://lyre.cofc.edu/server/rest/services/shoc/pl_sanborn1902/FeatureServer/0",
-        outFields: ["prime_material", "function_prime", "place_descript", "orig_address_no", "orig_address_street", "orig_city"],
+        url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points, // Reusing the defined renderer
         id: "pointsLayer", // Give the layer an ID for easy referencing
         visible: pointsSwitch.checked, 
