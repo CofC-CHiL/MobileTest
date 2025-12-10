@@ -25,9 +25,9 @@
 
 	<body>	
 	<nav class="navbar navbar-expand-md nav-row" id="navRow1">
-    <h1 class="navbar-brand logo-title my-0">
-        <img src="https://i.imgur.com/4l3a4n1.jpeg" alt="SHOC Logo" class="logo d-inline-block align-center">SHOC Test
-    </h1>
+    <a href="https://lyre.cofc.edu/portal/apps/sites/#/shoc" target="_blank"><h1 class="navbar-brand logo-title my-0">
+        <img src="https://i.imgur.com/4l3a4n1.jpeg" alt="SHOC Logo" class="logo d-inline-block align-center">Spatial History of Charleston
+    </h1></a>
     <div class="menu-end ms-lg-auto">
     <button class="navbar-toggler collapser button2 h-100 btn nav-item" type="button" data-toggle="collapse" data-target=".navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
     <calcite-icon icon="sliders" />
@@ -35,10 +35,9 @@
   </div>
 <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
     <div id="slider-container" class="slider w-100 col h-100 justify-content-center align-content-center">
-        <label class="row w-100 d-inline-flex justify-content-center align-content-center">Historic Map Opacity
+        <label class="row w-100 d-inline-flex justify-content-center align-content-center"><span>Historic Map Opacity: <span id="rangeValue" class="slider-value" style="display: inline;">100%</span></span>
 				<div class="slider-wrapper w-100 px-4">
 					<input type="range" min="0" max="100" value="100" class="rangeSlider w-100" id="sliderDiv">
-					<span id="rangeValue" class="slider-value">100%</span>
 				</div>
 		</label>
     </div>
@@ -127,7 +126,7 @@
                 <h2>Results</h2>
                 <div class="resultBox">
                     <ul id="point-list" class="list-group">
-                        <li id="defaultPointOption" value="1=0" class="list-group-item">Use the search bar or date range slider.</li>
+                        <li id="defaultPointOption" value="1=0" class="list-group-item">Use the search bar and date range slider to find points on the map.</li>
                     </ul>
                 </div>
                 <hr>
@@ -162,7 +161,8 @@
         </button>
     </div>
     
-    	<arcgis-map basemap="streets" center= "-79.939, 32.785" zoom= "13">
+    <!--<arcgis-map basemap="streets" center= "-79.939, 32.785" zoom= "13">-->
+    <arcgis-map basemap="streets" center= "-79.939, 32.785" zoom= "13">
         <arcgis-zoom position="top-right"></arcgis-zoom>
         <arcgis-home position="top-right"></arcgis-home>
         <arcgis-locate position="top-right" scale="500"></arcgis-locate>
