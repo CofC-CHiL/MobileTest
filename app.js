@@ -237,9 +237,6 @@ reactiveUtils.watch(
                     ${currAdd ?? ``}
                     <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
                     <a href="${mapURL}">View Source Map</a>
-                    <hr>
-                    <h4>At This Place</h4>
-                    <p>No results/search doesn't work yet</p>
                 `;
                 document.getElementById('pointsInfo').innerHTML = contentHTML;
                 featureNode.style.display = "block";
@@ -351,9 +348,6 @@ reactiveUtils.watch(
                     ${currAdd ?? ``}
                     <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
                     <a href="${mapURL}">View Source Map</a>
-                    <hr>
-                    <h4>At This Place</h4>
-                    <p>No results/search doesn't work yet</p>
                     `;
                     pointsInfo.innerHTML = contentHTML;
                     
