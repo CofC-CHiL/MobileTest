@@ -152,7 +152,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                     `;
                 });
             } else {
-                contentHTML += "<p>No matching historic place records found in the detailed layer.</p>";
+                contentHTML += "<p>No matching records found.</p>";
             }
 
             // 3. Populate the pointsInfo div
@@ -616,6 +616,7 @@ function queryPoints(searchText) {
             UPPER(curr_address_street) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(orig_city) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(curr_city) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(source_year) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(orig_address_no || ' ' || orig_address_street) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(curr_address_no || ' ' || curr_address_street) LIKE '%${searchText.toUpperCase()}%'
         )`;
@@ -637,10 +638,11 @@ function queryPoints(searchText) {
     
     placesLayer.queryFeatures(placesQuery)
         .then(placesResults => {
-            if (placesResults.features.length === 0) {
+            if (!placesResults || placesResults.features.length === 0) {
+                // If no features found in detailed layer, update UI and exit promise chain cleanly
                 pointListElement.innerHTML = `<li class="list-group-item">No records found matching your search and date range.</li>`;
                 pointsCounter.innerHTML = `Places (0)`;
-                return;
+                return null; // Return null to signal subsequent .then blocks to stop
             }
 
             // Extract unique ORIG_FID values (from placesLayer.place_ID)
@@ -657,6 +659,12 @@ function queryPoints(searchText) {
             });
         })
         .then(pointResults => {
+        
+        	// Check if we received valid results from the previous step
+            if (!pointResults) {
+                return; // Exit if the previous step returned null
+            }
+            
             const features = pointResults.features;
 
             pointsCounter.innerHTML = `Places (${features.length})`;
@@ -691,6 +699,7 @@ function queryPoints(searchText) {
         .catch(error => {
             console.error("Error querying places/points layers:", error);
             pointListElement.innerHTML = `<li class="list-group-item">Error retrieving search results.</li>`;
+            pointsCounter.innerHTML = `Places (0)`;
         });
 }
 //	Listener for clicking the source map link in the points info tab
