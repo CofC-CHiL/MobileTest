@@ -45,15 +45,123 @@ let clickedGraphic = null; // Reference to the last clicked graphic on the map
 let currentHighlight = null; // Reference to the current highlight graphic
 let tileLayer; // Variable to hold the dynamically loaded TileLayer
 let pointsLayer;
+let placesLayer;
+let lastSelectedOrigFid = null;
+let lastSelectedAddress = null;
 const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
 
 //See if any variable is null
 function createStringIfNotNull(...variables) {
-    const dataPart = variables[1]; // e.g., concatAddress
+    const dataPart = variables[1]; 
     if (dataPart === null || dataPart === undefined || dataPart.trim() === '') {
         return null;
     }
     return variables.join('');
+}
+
+// Globally define the function to query the placesLayer for related features
+function queryAndDisplayPlaces(origFidValue, originalAddress) {
+    if (origFidValue === null || origFidValue === undefined) {
+        document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Could not retrieve related details (Missing ORIG_FID).</p>`;
+        return;
+    }
+
+	// Get the current date range values from the sliders
+    const minYear = document.getElementById('dateSlider_l').value;
+    const maxYear = document.getElementById('dateSlider_r').value;
+    
+    // Construct the core feature matching query
+    const matchQuery = `place_ID = '${origFidValue}'`;
+    
+    // Construct the date filter query
+    // Use CAST to ensure the comparison is numerical, essential for range filtering.
+    const dateQuery = `CAST(source_year AS INTEGER) >= ${minYear} AND CAST(source_year AS INTEGER) <= ${maxYear}`;
+    
+    // Combine both conditions using 'AND'
+    const finalWhereClause = `${matchQuery} AND ${dateQuery}`;
+    
+    // Construct the query to find matching features in placesLayer
+    const query = placesLayer.createQuery();
+    // The key relationship: ORIG_FID from the index layer matches place_ID in the main places layer
+    query.where = finalWhereClause;
+    query.outFields = ["*"]; // Get all fields
+    query.returnGeometry = true;
+
+    // Display a loading message while querying
+    document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading related historic records...</p>`;
+
+    placesLayer.queryFeatures(query)
+        .then(results => {
+            const features = results.features;
+            
+            // Start the HTML content with the address from the index layer
+            let contentHTML = `<h3>${originalAddress}</h3>`;
+
+            if (features.length > 0) {
+                // 2. Iterate and format the results
+                features.forEach((feature, index) => {
+                    const attributes = feature.attributes;
+                    
+                    // Helper function usage for clean display
+                    const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
+    				.filter(part => part) 
+   					.join(" ");
+   					const currConcatAddress = [attributes.curr_address_no, attributes.curr_address_street]
+    				.filter(part => part) 
+   					.join(" ");
+               		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
+               		const contentTitle = createStringIfNotNull(`<h4>`, attributes.place_descript,`</h4>`);
+        			const sourceData = [
+    					attributes.source_year ?? '', 
+    					attributes.place_source ?? ''
+					].filter(s => s).join(' ');
+					const sourcePlat = sourceData ? `<b>Source:</b> ${sourceData}<br>` : null;
+        			const origAdd = createStringIfNotNull(`<b>Original Address:</b> `, concatAddress,`<br>`);
+        			const altTitle = `<h3>${attributes.place_descript}</h3>`;
+        			const muni = createStringIfNotNull(`<b>Original Municipality:</b> `,attributes.orig_city,`<br>`);
+        			const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,attributes.prime_material,`<br>`);
+        			const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,attributes.add_material,`<br>`);
+        			const primFunc = createStringIfNotNull(`<b>Primary Function:</b> `,attributes.function_prime,`<br>`);
+        			const secFunc = createStringIfNotNull(`<b>Secondary Function:</b> `,attributes.function_second,`<br>`);
+        			const placeDesc = createStringIfNotNull(`<b>Place Description:</b> `,attributes.place_descript,`<br>`);
+        			const max_stories = createStringIfNotNull(`<b>Max Number of Stories:</b> `,attributes.max_stories,`<br>`);
+        			const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
+        			const currMuni = createStringIfNotNull(`<b>Current Municipality:</b> `,attributes.curr_city,`<br>`);
+        			const mapURL = attributes.map_url;
+        			const y = feature.geometry.y;
+                	const x = feature.geometry.x;
+                	const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
+
+                    contentHTML += `
+                        <div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
+                            ${contentTitle ?? altTitle}
+                    		${sourcePlat ?? ``}
+                			${origAdd ?? ``}
+                    		${muni ?? ``}
+                    		${primMat ?? ``}
+                    		${secMat ?? ``}
+                    		${primFunc ?? ``}
+                    		${secFunc ?? ``}
+                    		${placeDesc ?? ``}
+                    		${max_stories ?? ``}
+                    		${currAdd ?? ``}
+                    		${currMuni ?? ``}
+                    		<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
+                    		<a href="#" value="${mapURL}"">View Source Map</a>
+                        </div>
+                    `;
+                });
+            } else {
+                contentHTML += "<p>No matching historic place records found in the detailed layer.</p>";
+            }
+
+            // 3. Populate the pointsInfo div
+            document.getElementById('pointsInfo').innerHTML = contentHTML;
+        })
+        .catch(error => {
+            console.error("Error querying placesLayer:", error);
+            document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>An error occurred while querying related places.</p>`;
+        });
 }
 
 // Globally define the Zoom to Tile Layer Extent function
@@ -146,12 +254,20 @@ reactiveUtils.watch(
     
     // === Points Layer Initialization ===
     
-    // Initialize the FeatureLayer for the Sanborn 1902 points
+    // Initialize the FeatureLayer for the places_index points
     pointsLayer = new FeatureLayer({
-        url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+    	url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
+    	outFields: ["orig_no_street_address", "ORIG_FID"],
+        //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+        //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points,
     });
+    
+    // Initialize the FeatureLayer for the places results
+    placesLayer = new FeatureLayer({
+    	url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+        });
     
     // Add the points layer to the map (at index 1, above the base map)
     viewElement.map.add(pointsLayer, 1);
@@ -180,12 +296,18 @@ reactiveUtils.watch(
         // Query the feature to get geometry and attributes for centering/display
         pointsLayer.queryFeatures({
             where: `OBJECTID = ${objectId}`,
-            outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+            //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+            outFields: ["orig_no_street_address", "ORIG_FID"],
             returnGeometry: true
         }).then(results => {
             if (results.features.length > 0) {
                 const graphicToHighlight = results.features[0];
                 const attributes = graphicToHighlight.attributes;
+                const origFidValue = attributes.ORIG_FID;
+                const addressFromIndex = attributes.orig_no_street_address;
+                lastSelectedOrigFid = origFidValue;
+    			lastSelectedAddress = addressFromIndex;
+                queryAndDisplayPlaces(origFidValue, addressFromIndex);
                 const y = results.features[0].geometry.y;
                 const x = results.features[0].geometry.x;
                 const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
@@ -197,48 +319,7 @@ reactiveUtils.watch(
                 viewElement.view.whenLayerView(pointsLayer).then(layerView => {
                     currentHighlight = layerView.highlight(graphicToHighlight);
                 });
-            	
-            	const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
-    				.filter(part => part) 
-   					.join(" ");
-   				const currConcatAddress = [attributes.curr_address_no, attributes.curr_address_street]
-    				.filter(part => part) 
-   					.join(" ");
-               	const contentTitle = createStringIfNotNull(`<h3>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h3>`);
-        		const sourceData = [
-    				attributes.source_year ?? '', 
-    				attributes.place_source ?? ''
-					].filter(s => s).join(' ');
-				const sourcePlat = sourceData ? `<b>Source:</b> ${sourceData}<br>` : null;
-        		const origAdd = createStringIfNotNull(`<b>Original Address:</b> `, concatAddress,`<br>`);
-        		const altTitle = `<h3>${attributes.place_descript}</h3>`;
-        		const muni = createStringIfNotNull(`<b>Municipality:</b> `,attributes.orig_city,`<br>`);
-        		const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,attributes.prime_material,`<br>`);
-        		const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,attributes.add_material,`<br>`);
-        		const primFunc = createStringIfNotNull(`<b>Primary Function:</b> `,attributes.function_prime,`<br>`);
-        		const secFunc = createStringIfNotNull(`<b>Secondary Function:</b> `,attributes.function_second,`<br>`);
-        		const placeDesc = createStringIfNotNull(`<b>Place Description:</b> `,attributes.place_descript,`<br>`);
-        		const max_stories = createStringIfNotNull(`<b>Max Number of Stories:</b> `,attributes.max_stories,`<br>`);
-        		const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
-        		const mapURL = attributes.map_url;
-            	
-                // Populate the pointsInfo div
-                const contentHTML = `
-                    ${contentTitle ?? altTitle}
-                    ${sourcePlat ?? ``}
-                	${origAdd ?? ``}
-                    ${muni ?? ``}
-                    ${primMat ?? ``}
-                    ${secMat ?? ``}
-                    ${primFunc ?? ``}
-                    ${secFunc ?? ``}
-                    ${placeDesc ?? ``}
-                    ${max_stories ?? ``}
-                    ${currAdd ?? ``}
-                    <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
-                    <a href="${mapURL}">View Source Map</a>
-                `;
-                document.getElementById('pointsInfo').innerHTML = contentHTML;
+
                 featureNode.style.display = "block";
                 if (window.innerWidth < 850) {
                 featureNode.style.width= "80vw";
@@ -251,6 +332,7 @@ reactiveUtils.watch(
 				expandIcon.style.display = "none";
 				$('#pointsCounter').tab('show');
             }
+            updateSliders();
         }).catch(error => {
             console.error("Error highlighting or populating feature:", error);
             document.getElementById('pointsInfo').innerHTML = "No point selected";
@@ -284,35 +366,14 @@ reactiveUtils.watch(
     // Listener for map click (hitTest for points)
     viewElement.view.on("click", (event) => {
         viewElement.view.hitTest(event).then(function(response) {
-            if (response.results.length > 0) {
+        	const pointResult = response.results.find(result => result.graphic.layer === pointsLayer);
+
+            if (pointResult) {
+            //if (response.results.length > 0) {
                 const graphic = response.results[0].graphic;
                 const prefix = graphic.attributes;
                 const lat = response.results[0].mapPoint.latitude;
                 const long = response.results[0].mapPoint.longitude;
-                
-                const concatAddress = [prefix.orig_address_no, prefix.orig_address_street]
-    				.filter(part => part) 
-   					.join(" ");
-   				const currConcatAddress = [prefix.curr_address_no, prefix.curr_address_street]
-    				.filter(part => part) 
-   					.join(" ");
-                const sourceData = [
-    				prefix.source_year ?? '', 
-    				prefix.place_source ?? ''
-					].filter(s => s).join(' ');
-				const sourcePlat = sourceData ? `<b>Source:</b> ${sourceData}<br>` : null;
-                const contentTitle = createStringIfNotNull(`<h3>`, prefix.orig_address_no, ` `, prefix.orig_address_street,`</h3>`);
-                const origAdd = createStringIfNotNull(`<b>Original Address:</b> `, concatAddress,`<br>`);
-				const altTitle = `<h3>${prefix.place_descript}</h3>`;
-				const muni = createStringIfNotNull(`<b>Municipality:</b> `,prefix.orig_city,`<br>`);
-				const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,prefix.prime_material,`<br>`);
-				const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,prefix.add_material,`<br>`);
-				const primFunc = createStringIfNotNull(`<b>Primary Function:</b> `,prefix.function_prime,`<br>`);
-				const secFunc = createStringIfNotNull(`<b>Secondary Function:</b> `,prefix.function_second,`<br>`);
-				const placeDesc = createStringIfNotNull(`<b>Place Description:</b> `,prefix.place_descript,`<br>`);
-				const max_stories = createStringIfNotNull(`<b>Max Number of Stories:</b> `,prefix.max_stories,`<br>`);
-        		const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
-        		const mapURL = prefix.map_url;
 				
                 // Clear the previous highlight
                 if (currentHighlight) {
@@ -332,24 +393,22 @@ reactiveUtils.watch(
                 clickedGraphic = graphic;
                 
                 // Populate the sidebar if a point feature was clicked
-                if (prefix.orig_city !== undefined) {
+                //if (prefix.orig_city !== undefined) {
+                if (prefix.orig_no_street_address !== undefined) {
 					
-                    const contentHTML = `
-                    	${contentTitle ?? altTitle}
-                    ${sourcePlat ?? ``}
-                	${origAdd ?? ``}
-                    ${muni ?? ``}
-                    ${primMat ?? ``}
-                    ${secMat ?? ``}
-                    ${primFunc ?? ``}
-                    ${secFunc ?? ``}
-                    ${placeDesc ?? ``}
-                    ${max_stories ?? ``}
-                    ${currAdd ?? ``}
-                    <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
-                    <a href="${mapURL}">View Source Map</a>
-                    `;
-                    pointsInfo.innerHTML = contentHTML;
+					const origFidValue = prefix.ORIG_FID;
+                    const addressFromIndex = prefix.orig_no_street_address;
+                    
+                    lastSelectedOrigFid = origFidValue;
+    				lastSelectedAddress = addressFromIndex;
+    
+                    queryAndDisplayPlaces(origFidValue, addressFromIndex);
+                    
+                    //const contentHTML = `
+                    //<h3>${prefix.orig_no_street_address}</h3>
+                    //<p>No results/search doesn't work yet</p>
+                    //`;
+                    //pointsInfo.innerHTML = contentHTML;
                     
                     // Show/expand sidebar
                     featureNode.style.display = "block";
@@ -524,85 +583,138 @@ function queryCount(extent) {
 // Function to query point features based on search bar text
 function queryPoints(searchText) {
     const pointListElement = document.getElementById("point-list");
+    pointListElement.innerHTML = '';
+    pointsCounter.innerHTML = `Places`;
+    
+    // Get the current date range values from the sliders
+    const minYear = document.getElementById('dateSlider_l').value;
+    const maxYear = document.getElementById('dateSlider_r').value;
+    
+    let whereClause = `CAST(source_year AS INTEGER) >= ${minYear} AND CAST(source_year AS INTEGER) <= ${maxYear}`;
     
     // If search text is empty, reset the list
     if (!searchText) {
-        pointListElement.innerHTML = `<li id="defaultPointOption" value="undefined" class="list-group-item">Use the search bar or date range slider.</li>`;
+        pointListElement.innerHTML = `<li id="defaultPointOption" value="undefined" class="list-group-item">Use the search bar and date range slider to search points on the map.</li>`;
         pointsCounter.innerHTML = `Places`;
         return; 
     }
     
     pointListElement.innerHTML = ''; // Clear the list
-
-    let whereClause = "1=1"; // Default WHERE clause
     
-    // Create a case-insensitive search across multiple fields
+    //  Add text filter if available
     if (searchText) {
-        whereClause = `(
+        const searchFilter = `(
             UPPER(orig_address_no) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(orig_address_street) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(prime_material) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(add_material) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(function_prime) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(function_second) LIKE '%${searchText.toUpperCase()}%' OR
-            UPPER(function_prime) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(place_source) LIKE '%${searchText.toUpperCase()}%' OR
             UPPER(place_descript) LIKE '%${searchText.toUpperCase()}%' OR
-            UPPER(orig_address_no || ' ' || orig_address_street) LIKE '%${searchText.toUpperCase()}%'
+            UPPER(curr_address_no) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(curr_address_street) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(orig_city) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(curr_city) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(orig_address_no || ' ' || orig_address_street) LIKE '%${searchText.toUpperCase()}%' OR
+            UPPER(curr_address_no || ' ' || curr_address_street) LIKE '%${searchText.toUpperCase()}%'
         )`;
+        whereClause = `${whereClause} AND ${searchFilter}`;
+    } else {
+        // If no text search, do not show all places records, only search when text is entered.
+        pointListElement.innerHTML = `<li id="defaultPointOption" value="1=0" class="list-group-item">Use the search bar and date range slider to search points on the map.</li>`;
+        return; 
     }
     
-    // Query points to populate the list
-    viewElement.map.layers.find(layer => layer.url.includes("places")).queryFeatures({
+    // Query the detailed placesLayer for matching records
+    const placesQuery = {
         where: whereClause,
-        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
-        returnGeometry: false
-    }).then(results => {
-        // Sort features alphabetically by address
-        const sortedFeatures = results.features.sort((a, b) => {
-            const addressA = `${a.attributes.orig_address_no} ${a.attributes.orig_address_street}`;
-            const addressB = `${b.attributes.orig_address_no} ${b.attributes.orig_address_street}`;
-            return addressA.localeCompare(addressB);
-        });
-        
-        pointsCounter.innerHTML = `Places (${sortedFeatures.length})`; // Update places count in tab
+        // Need place_ID to match back to pointsLayer (as ORIG_FID) and OBJECTID for filtering the point layer results
+        outFields: ["place_ID", "OBJECTID", "place_descript"], 
+        returnGeometry: false,
+        returnDistinctValues: true, // Only return unique place_ID values
+    };
+    
+    placesLayer.queryFeatures(placesQuery)
+        .then(placesResults => {
+            if (placesResults.features.length === 0) {
+                pointListElement.innerHTML = `<li class="list-group-item">No records found matching your search and date range.</li>`;
+                pointsCounter.innerHTML = `Places (0)`;
+                return;
+            }
 
-        if (sortedFeatures.length === 0) {
-            const noResultsItem = document.createElement("li");
-            noResultsItem.textContent = "No points found.";
-            noResultsItem.className = "list-group-item";
-            pointListElement.appendChild(noResultsItem);
-        } else {
-            // Append results to the list
+            // Extract unique ORIG_FID values (from placesLayer.place_ID)
+            const placeIds = placesResults.features.map(f => f.attributes.place_ID).filter(id => id);
+            
+            // Build the filter for the pointsLayer (index layer)
+            const uniquePlaceIdsFilter = `ORIG_FID IN (${placeIds.join(",")})`;
+
+            // 4. Query the pointsLayer (index layer) to get the point addresses and OBJECTIDs
+            return pointsLayer.queryFeatures({
+                where: uniquePlaceIdsFilter,
+                outFields: ["orig_no_street_address", "OBJECTID", "ORIG_FID"],
+                returnGeometry: false
+            });
+        })
+        .then(pointResults => {
+            const features = pointResults.features;
+
+            pointsCounter.innerHTML = `Places (${features.length})`;
+            
+            if (features.length === 0) {
+                 pointListElement.innerHTML = `<li class="list-group-item">No points found for the matching records.</li>`;
+                 return;
+            }
+
+            // Sort features alphabetically by address
+            const sortedFeatures = features.sort((a, b) => {
+                const addressA = a.attributes.orig_no_street_address || '';
+                const addressB = b.attributes.orig_no_street_address || '';
+                return addressA.localeCompare(addressB);
+            });
+            
+            // 5. Populate the list
             sortedFeatures.forEach(feature => {
-                const listItem = document.createElement("li");
                 const attributes = feature.attributes;
-                
-				const addressPart = [attributes.orig_address_no, attributes.orig_address_street]
-    				.filter(part => part)
-    				.join(" ");
-				const fullTitle = addressPart 
-    				? `${addressPart}: ${attributes.place_descript ?? 'Details'}` 
-    				: attributes.place_descript; 
+                const listItem = document.createElement("li");
 
-				listItem.value = attributes.OBJECTID;
-				listItem.textContent = fullTitle ?? "[Unknown]";
+                // Use the simplified address from the pointsLayer for the display list
+                const fullTitle = attributes.orig_no_street_address ?? "[Address Unknown]";
+
+                listItem.value = attributes.OBJECTID;
+                listItem.textContent = fullTitle;
                 listItem.className = "list-group-item";
                 pointListElement.appendChild(listItem);
             });
-        }
-    }).catch(error => {
-        console.error("Error querying points:", error);
-    });
+            
+        })
+        .catch(error => {
+            console.error("Error querying places/points layers:", error);
+            pointListElement.innerHTML = `<li class="list-group-item">Error retrieving search results.</li>`;
+        });
 }
 //	Listener for clicking the source map link in the points info tab
 pointsInfo.addEventListener("click", (event) => {
-    const clickedLi = event.target.closest('a');
+    const clickedAnchor = event.target.closest('a');
 
-    if (!clickedLi) {
+    if (!clickedAnchor || clickedAnchor.getAttribute('value') === null) {
         return;
     }
+    
+    // Stop the default action of the link (like trying to navigate away)
+    event.preventDefault();
 
     // Update the whereClause with the selected map's service URL condition
-    whereClause = clickedLi.getAttribute('value');
+    whereClause = `service_url = '${clickedAnchor.getAttribute('value')}'`;
+    
+    // Remove the current active map selection
+    const allListItems = resultsList.querySelectorAll('li');
+    allListItems.forEach(item => {
+        item.classList.remove('active');
+    });
+
+    // Switch to the Maps tab if not already there
+    $('#mapsCounter').tab('show');
 
     // Load the selected historic map
     queryFeatureLayer(viewElement.extent);
@@ -738,8 +850,10 @@ function displayResults(results) {
 
     // Re-add the points layer on top of the tile layer (at index 1)
     const newPointsLayer = new FeatureLayer({
-        url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+        url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
+    	outFields: ["orig_no_street_address", "ORIG_FID"],
+        //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+        //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points, // Reusing the defined renderer
         id: "pointsLayer", // Give the layer an ID for easy referencing
         visible: pointsSwitch.checked, 
@@ -805,6 +919,16 @@ function updateSliders() {
     clearTimeout(sliderTimeout);
     sliderTimeout = setTimeout(() => {
         queryCount(viewElement.extent); // Re-query maps with new date range
+        // REFRESH POINTS LIST if search is active
+        const searchText = searchBar.value.trim();
+        if (searchText) {
+            queryPoints(searchText);
+        }
+
+        // REFRESH RELATED DETAILS if a point is currently selected
+        if (lastSelectedOrigFid !== null && lastSelectedAddress !== null) {
+            queryAndDisplayPlaces(lastSelectedOrigFid, lastSelectedAddress);
+        }
     }, 300); // 300ms delay for debouncing
 }
 
