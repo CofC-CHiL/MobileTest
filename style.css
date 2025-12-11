@@ -238,6 +238,14 @@ span > calcite-icon {
 	background-color: var(--primary-color);
 	color: var(--text-light);
 }
+/* Change Navbar Text by screen size */
+.largeScreenText{
+   display:inline-block;
+}
+
+.smallScreenText{
+   display:none;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -563,6 +571,15 @@ height: calc(100vh - var(--header-height));
 .map-floater{
 display: none;
 }
+/* Change Navbar Text by screen size */
+.largeScreenText{
+   display:none;
+}
+
+.smallScreenText{
+   display:inline-block;
+}
+
 }
 #nav-item{
 padding-top: 10px;
