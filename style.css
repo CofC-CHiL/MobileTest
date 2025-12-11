@@ -1,4 +1,3 @@
-/*
 |--------------------------------------------------------------------------
 | CSS Custom Properties (Variables)
 |--------------------------------------------------------------------------
@@ -342,7 +341,7 @@ arcgis-map {
 /* Common styles for both selected and result boxes */
 .selectedBox,
 .resultBox {
-    max-height: 35vh;
+	max-height: 40vh;
     overflow-y: scroll;
     margin-bottom: 10px;
 }
