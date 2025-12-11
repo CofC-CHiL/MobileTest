@@ -50,6 +50,64 @@ let lastSelectedOrigFid = null;
 let lastSelectedAddress = null;
 const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
 
+// Helper function to handle map centering, highlighting, and fetching related details
+function handlePointSelection(objectId) {
+    
+    // Clear previous highlight
+    if (currentHighlight) {
+        currentHighlight.remove();
+    }
+
+    // Query the pointsLayer (index layer) by OBJECTID
+    pointsLayer.queryFeatures({
+        where: `OBJECTID = ${objectId}`,
+        outFields: ["orig_no_street_address", "ORIG_FID", "OBJECTID"],
+        returnGeometry: true
+    }).then(results => {
+        if (results.features.length > 0) {
+            const graphicToHighlight = results.features[0];
+            const attributes = graphicToHighlight.attributes;
+            const origFidValue = attributes.ORIG_FID;
+            const addressFromIndex = attributes.orig_no_street_address;
+            
+            //  Save state globally (used by updateSliders for refreshing details)
+            lastSelectedOrigFid = origFidValue;
+            lastSelectedAddress = addressFromIndex;
+
+            //. Center map and highlight point
+            viewElement.view.goTo(graphicToHighlight.geometry);
+            viewElement.view.whenLayerView(pointsLayer).then(layerView => {
+                currentHighlight = layerView.highlight(graphicToHighlight); 
+            });
+
+            //  Query the detailed placesLayer and update the sidebar
+            queryAndDisplayPlaces(origFidValue, addressFromIndex);
+
+            //  Update UI state (show sidebar/switch tab)
+            featureNode.style.display = "block";
+            if (window.innerWidth < 850) {
+                featureNode.style.width= "80vw";
+                featureNode.style.zindex="1001";
+            } else {
+                featureNode.style.width="25vw";
+                viewElement.style.width="75vw";
+            }
+            collapseIcon.style.display = "block";
+            expandIcon.style.display = "none";
+            $('#pointsCounter').tab('show');
+            
+            //  Refresh related map results (already calls queryPoints if search is active)
+            updateSliders(); 
+            
+        } else {
+            document.getElementById('pointsInfo').innerHTML = "Error: Point data not found.";
+        }
+    }).catch(error => {
+        console.error("Error highlighting or populating feature:", error);
+        document.getElementById('pointsInfo').innerHTML = "Error: Could not process selection.";
+    });
+}
+
 //See if any variable is null
 function createStringIfNotNull(...variables) {
     const dataPart = variables[1]; 
@@ -288,55 +346,7 @@ reactiveUtils.watch(
 
         const objectId = clickedItem.value;
 
-        // Clear previous highlight
-        if (currentHighlight) {
-            currentHighlight.remove();
-        }
-
-        // Query the feature to get geometry and attributes for centering/display
-        pointsLayer.queryFeatures({
-            where: `OBJECTID = ${objectId}`,
-            //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
-            outFields: ["orig_no_street_address", "ORIG_FID"],
-            returnGeometry: true
-        }).then(results => {
-            if (results.features.length > 0) {
-                const graphicToHighlight = results.features[0];
-                const attributes = graphicToHighlight.attributes;
-                const origFidValue = attributes.ORIG_FID;
-                const addressFromIndex = attributes.orig_no_street_address;
-                lastSelectedOrigFid = origFidValue;
-    			lastSelectedAddress = addressFromIndex;
-                queryAndDisplayPlaces(origFidValue, addressFromIndex);
-                const y = results.features[0].geometry.y;
-                const x = results.features[0].geometry.x;
-                const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
-                
-                // Center the map on the selected point
-                viewElement.view.goTo(graphicToHighlight.geometry);
-
-                // Highlight the selected graphic
-                viewElement.view.whenLayerView(pointsLayer).then(layerView => {
-                    currentHighlight = layerView.highlight(graphicToHighlight);
-                });
-
-                featureNode.style.display = "block";
-                if (window.innerWidth < 850) {
-                featureNode.style.width= "80vw";
-                featureNode.style.zindex="1001";
-                } else {
-				featureNode.style.width= "25vw";
-				viewElement.style.width="75vw";
-				}
-				collapseIcon.style.display = "block";
-				expandIcon.style.display = "none";
-				$('#pointsCounter').tab('show');
-            }
-            updateSliders();
-        }).catch(error => {
-            console.error("Error highlighting or populating feature:", error);
-            document.getElementById('pointsInfo').innerHTML = "No point selected";
-        });
+        handlePointSelection(objectId);
     });
 
     // Listener for typing in the search bar
@@ -372,8 +382,7 @@ reactiveUtils.watch(
             //if (response.results.length > 0) {
                 const graphic = response.results[0].graphic;
                 const prefix = graphic.attributes;
-                const lat = response.results[0].mapPoint.latitude;
-                const long = response.results[0].mapPoint.longitude;
+                const objectId = prefix.OBJECTID;
 				
                 // Clear the previous highlight
                 if (currentHighlight) {
@@ -392,50 +401,39 @@ reactiveUtils.watch(
                 
                 clickedGraphic = graphic;
                 
-                // Populate the sidebar if a point feature was clicked
-                //if (prefix.orig_city !== undefined) {
-                if (prefix.orig_no_street_address !== undefined) {
-					
-					const origFidValue = prefix.ORIG_FID;
-                    const addressFromIndex = prefix.orig_no_street_address;
-                    
-                    lastSelectedOrigFid = origFidValue;
-    				lastSelectedAddress = addressFromIndex;
-    
-                    queryAndDisplayPlaces(origFidValue, addressFromIndex);
-                    
-                    //const contentHTML = `
-                    //<h3>${prefix.orig_no_street_address}</h3>
-                    //<p>No results/search doesn't work yet</p>
-                    //`;
-                    //pointsInfo.innerHTML = contentHTML;
-                    
-                    // Show/expand sidebar
-                    featureNode.style.display = "block";
-                    if (window.innerWidth < 850) {
-                featureNode.style.width= "80vw";
-                featureNode.style.zindex="1001";
-                } else {
-				featureNode.style.width= "25vw";
-				viewElement.style.width="75vw";
-				}
-                    collapseIcon.style.display = "block";
-                    expandIcon.style.display = "none";
-                    
-                    // Switch to the 'Places' tab
-                    $('#pointsCounter').tab('show');
-                    
-                } else {
-                    pointsInfo.innerHTML = "No points selected";
-                    clickedGraphic = null;
-                }
-            } else {
-                // Clear highlight if map is clicked outside a feature
-                if (currentHighlight) {
-                    currentHighlight.remove();
-                }
-                pointsInfo.innerHTML = "No points selected";
+                // Center map, save state, and fetch details (call the reusable function)
+        
+            	const origFidValue = prefix.ORIG_FID;
+            	const addressFromIndex = prefix.orig_no_street_address;
+            
+            	lastSelectedOrigFid = origFidValue;
+            	lastSelectedAddress = addressFromIndex;
+
+            	// Query the related features based on the clicked point
+            	queryAndDisplayPlaces(origFidValue, addressFromIndex);
+            
+            	// Show/expand sidebar
+            	featureNode.style.display = "block";
+            	if (window.innerWidth < 850) {
+                	featureNode.style.width= "80vw";
+                	featureNode.style.zindex="1001";
+            	} else {
+                	featureNode.style.width="25vw";
+                	viewElement.style.width="75vw";
+            	}
+            	collapseIcon.style.display = "block";
+            	expandIcon.style.display = "none";
+            
+            	// Switch to the 'Places' tab
+            	$('#pointsCounter').tab('show');
+            
+        } else {
+            // Clear highlight if map is clicked outside a feature
+            if (currentHighlight) {
+                currentHighlight.remove();
             }
+            pointsInfo.innerHTML = "No points selected";
+        }
         });
     });
 
