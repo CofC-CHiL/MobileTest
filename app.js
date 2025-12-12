@@ -34,8 +34,10 @@ const FeatureLayer = await $arcgis.import("@arcgis/core/layers/FeatureLayer.js")
 const TileLayer = await $arcgis.import("@arcgis/core/layers/TileLayer.js");
 const webMercatorUtils = await $arcgis.import("@arcgis/core/geometry/support/webMercatorUtils.js");
 const Extent = await $arcgis.import("@arcgis/core/geometry/Extent.js");
+const GraphicsLayer = await $arcgis.import("@arcgis/core/layers/GraphicsLayer.js");
 const defaultOption = document.querySelector("#defaultOption");
 const defaultPointOption = document.querySelector("#defaultPointOption");
+const SimpleRenderer = await $arcgis.import("@arcgis/core/renderers/SimpleRenderer.js");
 let whereClause = defaultOption.value; // Query string for historic map filter
 let wherePointClause = defaultPointOption.value; // Query string for points filter (not used consistently)
 const zoom = viewElement.zoom; // Initial map zoom level
@@ -48,6 +50,7 @@ let pointsLayer;
 let placesLayer;
 let lastSelectedOrigFid = null;
 let lastSelectedAddress = null;
+let relatedGraphicsLayer;
 const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
 
 // Helper function to handle map centering, highlighting, and fetching related details
@@ -74,11 +77,11 @@ function handlePointSelection(objectId) {
             lastSelectedOrigFid = origFidValue;
             lastSelectedAddress = addressFromIndex;
 
-            //. Center map and highlight point
+            // Center map and highlight point
             viewElement.view.goTo(graphicToHighlight.geometry);
-            viewElement.view.whenLayerView(pointsLayer).then(layerView => {
-                currentHighlight = layerView.highlight(graphicToHighlight); 
-            });
+            //viewElement.view.whenLayerView(pointsLayer).then(layerView => {
+                //currentHighlight = layerView.highlight(graphicToHighlight); 
+            //});
 
             //  Query the detailed placesLayer and update the sidebar
             queryAndDisplayPlaces(origFidValue, addressFromIndex);
@@ -123,6 +126,26 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Could not retrieve related details (Missing ORIG_FID).</p>`;
         return;
     }
+    
+    if (relatedGraphicsLayer) {
+        relatedGraphicsLayer.removeAll();
+    }
+    
+    // Define the temporary symbol for the related points
+    const relatedSymbol = {
+        type: "simple-marker",
+        style: "circle",
+        color: "#efbb3c",
+        size: 9.0,
+        angle: 0.0,
+        xoffset: 0,
+        yoffset: 0,
+        outline: {
+            color: "#660000",
+            width: 0.5
+        }
+    };
+    
 
 	// Get the current date range values from the sliders
     const minYear = document.getElementById('dateSlider_l').value;
@@ -152,6 +175,18 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         .then(results => {
             const features = results.features;
             
+            features.forEach(feature => {
+                // Clone the feature, assign the temporary symbol, and add to the layer
+                if (feature.geometry) {
+                    const relatedGraphic = {
+                        geometry: feature.geometry,
+                        attributes: feature.attributes,
+                        symbol: relatedSymbol 
+                    };
+                    relatedGraphicsLayer.add(relatedGraphic);
+                }
+            });
+            
             // Start the HTML content with the address from the index layer
             let contentHTML = `<h3>${originalAddress}</h3>`;
 
@@ -168,14 +203,21 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
     				.filter(part => part) 
    					.join(" ");
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
-               		const contentTitle = createStringIfNotNull(`<h4>`, attributes.place_descript,`</h4>`);
+               		const targetId = `placeDetail_${attributes.place_ID}_${index}`;
+               		const contentTitle = `
+    				<a class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
+        			<h4>${attributes.prime_material} (${attributes.source_year})</h4>
+    				</a>
+					`;
+					const startOfCollapse = `<div class="collapse" id="${targetId}">`;
+					const endOfCollapse = `</div>`;
         			const sourceData = [
     					attributes.source_year ?? '', 
     					attributes.place_source ?? ''
 					].filter(s => s).join(' ');
 					const sourcePlat = sourceData ? `<b>Source:</b> ${sourceData}<br>` : null;
         			const origAdd = createStringIfNotNull(`<b>Original Address:</b> `, concatAddress,`<br>`);
-        			const altTitle = `<h3>${attributes.place_descript}</h3>`;
+        			const altTitle = `<h4>${attributes.place_descript}</h4>`;
         			const muni = createStringIfNotNull(`<b>Original Municipality:</b> `,attributes.orig_city,`<br>`);
         			const primMat = createStringIfNotNull(`<b>Primary Material:</b> `,attributes.prime_material,`<br>`);
         			const secMat = createStringIfNotNull(`<b>Additional Material(s):</b> `,attributes.add_material,`<br>`);
@@ -192,10 +234,10 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
 
                     contentHTML += `
                         <div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
-                            ${contentTitle ?? altTitle}
+                            ${contentTitle}
+        					${startOfCollapse}
                     		${sourcePlat ?? ``}
                 			${origAdd ?? ``}
-                    		${muni ?? ``}
                     		${primMat ?? ``}
                     		${secMat ?? ``}
                     		${primFunc ?? ``}
@@ -203,9 +245,9 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                     		${placeDesc ?? ``}
                     		${max_stories ?? ``}
                     		${currAdd ?? ``}
-                    		${currMuni ?? ``}
-                    		<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); return false;">Zoom to Point</a><br>
+                    		<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); highlightPointByCoords(${long}, ${lat}); return false;">Zoom to Point</a><br>
                     		<a href="#" value="${mapURL}"">View Source Map</a>
+                    		${endOfCollapse}
                         </div>
                     `;
                 });
@@ -221,6 +263,57 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
             document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>An error occurred while querying related places.</p>`;
         });
 }
+
+// Function to highlight a visible point by coordinates (used by Zoom link)
+window.highlightPointByCoords = function(long, lat) {
+    if (currentHighlight) {
+        currentHighlight.remove();
+        currentHighlight = null;
+    }
+    
+    const query = placesLayer.createQuery();
+    
+    // Create a new map point from the coordinates
+    const pointGeometry = {
+        type: "point",
+        x: long,
+        y: lat,
+        spatialReference: { wkid: 4326 } // Assuming long/lat are WGS84 (4326)
+    };
+    
+    // Convert the point to the map's spatial reference (Web Mercator 3857)
+    //const webMercatorPoint = webMercatorUtils.geographicToWebMercator(mapPoint);
+
+  pointsLayer.queryFeatures(query)
+        .then(results => {
+            if (results.features.length > 0) {
+                const graphicToHighlight = results.features[0];
+
+                // 4. Perform the highlight using the LayerView
+                viewElement.view.whenLayerView(pointsLayer).then(layerView => {
+                    currentHighlight = layerView.highlight(graphicToHighlight, {
+                        color: "red",
+                        haloColor: "white",
+                        haloOpacity: 0.8,
+                        width: 2
+                    });
+                    
+                    // Optional: Clear highlight after a short delay (e.g., 2 seconds)
+                    setTimeout(() => {
+                        if (currentHighlight) {
+                            currentHighlight.remove();
+                            currentHighlight = null;
+                        }
+                    }, 2000); 
+                });
+            } else {
+                console.warn("No feature found at the queried coordinates for highlighting.");
+            }
+        })
+        .catch(error => {
+            console.error("Error during highlight query:", error);
+        });
+};
 
 // Globally define the Zoom to Tile Layer Extent function
 window.zoomToTileLayerExtent = function () {
@@ -278,7 +371,7 @@ const points = {
         xoffset: 0,
         yoffset: 0,
         outline: {
-            color: "#bfa87c",
+            color: "#efbb3c",
             width: 0.5
         }
     }
@@ -329,6 +422,14 @@ reactiveUtils.watch(
     
     // Add the points layer to the map (at index 1, above the base map)
     viewElement.map.add(pointsLayer, 1);
+    
+    // Initialize Graphics Layer for related points
+	relatedGraphicsLayer = new GraphicsLayer({
+    	id: "relatedGraphics"
+	});
+
+	// Add it to the map above the main pointsLayer
+	viewElement.map.add(relatedGraphicsLayer, 3);
     
     // === Event Listeners for Map/Sidebar Interaction ===
     
@@ -387,17 +488,22 @@ reactiveUtils.watch(
                 // Clear the previous highlight
                 if (currentHighlight) {
                     currentHighlight.remove();
+                    currentHighlight = null;
                 }
                 
                 // Highlight the clicked graphic
-                viewElement.view.whenLayerView(pointsLayer).then((layerView) => {
-                    currentHighlight = layerView.highlight(graphic, {
-                        color: "red",
-                        haloColor: "white",
-                        haloOpacity: 0.8,
-                        width: 2
-                    });
-                });
+                //viewElement.view.whenLayerView(pointsLayer).then((layerView) => {
+                    //currentHighlight = layerView.highlight(graphic, {
+                        //color: "red",
+                        //haloColor: "white",
+                        //haloOpacity: 0.8,
+                        //width: 2
+                    //});
+                //});
+                
+                if (pointsLayer) {
+                	pointsLayer.definitionExpression = `OBJECTID <> ${objectId}`;
+            	}
                 
                 clickedGraphic = graphic;
                 
@@ -429,8 +535,14 @@ reactiveUtils.watch(
             
         } else {
             // Clear highlight if map is clicked outside a feature
-            if (currentHighlight) {
-                currentHighlight.remove();
+            //if (currentHighlight) {
+                //currentHighlight.remove();
+            //}
+            if (pointsLayer) {
+                pointsLayer.definitionExpression = "1=1";
+            }
+            if (relatedGraphicsLayer) {
+                relatedGraphicsLayer.removeAll();
             }
             pointsInfo.innerHTML = "No points selected";
         }
@@ -511,7 +623,7 @@ function queryCount(extent) {
     // Reset the map results list
     resultsList.innerHTML = `<li
     id="defaultOption"
-    value="1=0" class="list-group-item"><h3>No Map</h3></li>`;
+    value="1=0" class="list-group-item"><h3>Hide Map</h3></li>`;
 
     const minYear = dateSlider_l.value;
     const maxYear = dateSlider_r.value;
