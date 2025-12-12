@@ -206,7 +206,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                		const targetId = `placeDetail_${attributes.place_ID}_${index}`;
                		const contentTitle = `
     				<a class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
-        			<h4>${attributes.prime_material} (${attributes.source_year})</h4>
+        			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
     				</a>
 					`;
 					const startOfCollapse = `<div class="collapse" id="${targetId}">`;
