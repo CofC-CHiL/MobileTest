@@ -123,77 +123,35 @@ function createStringIfNotNull(...variables) {
 // Globally define the function to query the placesLayer for related features
 function queryAndDisplayPlaces(origFidValue, originalAddress) {
     if (origFidValue === null || origFidValue === undefined) {
-        document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Could not retrieve related details (Missing ORIG_FID).</p>`;
+        document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Could not retrieve details.</p>`;
         return;
     }
-    
-    if (relatedGraphicsLayer) {
-        relatedGraphicsLayer.removeAll();
-    }
-    
-    // Define the temporary symbol for the related points
-    const relatedSymbol = {
-        type: "simple-marker",
-        style: "circle",
-        color: "#efbb3c",
-        size: 9.0,
-        angle: 0.0,
-        xoffset: 0,
-        yoffset: 0,
-        outline: {
-            color: "#660000",
-            width: 0.5
-        }
-    };
-    
 
-	// Get the current date range values from the sliders
     const minYear = document.getElementById('dateSlider_l').value;
     const maxYear = document.getElementById('dateSlider_r').value;
+
+    // 1. Update the filter to show ONLY the points related to this ID and Year
+    const finalWhereClause = `place_ID = '${origFidValue}' AND CAST(source_year AS INTEGER) >= ${minYear} AND CAST(source_year AS INTEGER) <= ${maxYear}`;
     
-    // Construct the core feature matching query
-    const matchQuery = `place_ID = '${origFidValue}'`;
-    
-    // Construct the date filter query
-    // Use CAST to ensure the comparison is numerical, essential for range filtering.
-    const dateQuery = `CAST(source_year AS INTEGER) >= ${minYear} AND CAST(source_year AS INTEGER) <= ${maxYear}`;
-    
-    // Combine both conditions using 'AND'
-    const finalWhereClause = `${matchQuery} AND ${dateQuery}`;
-    
-    // Construct the query to find matching features in placesLayer
+    // This line replaces .removeAll() and .add()
+    placesLayer.definitionExpression = finalWhereClause;
+    placesLayer.visible = true;
+
+    // 2. Query for the attributes to fill the sidebar
     const query = placesLayer.createQuery();
-    // The key relationship: ORIG_FID from the index layer matches place_ID in the main places layer
     query.where = finalWhereClause;
-    query.outFields = ["*"]; // Get all fields
+    query.outFields = ["*"];
     query.returnGeometry = true;
 
-    // Display a loading message while querying
-    document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading related historic records...</p>`;
+    document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading records...</p>`;
 
-    placesLayer.queryFeatures(query)
-        .then(results => {
-            const features = results.features;
-            
-            features.forEach(feature => {
-                // Clone the feature, assign the temporary symbol, and add to the layer
-                if (feature.geometry) {
-                    const relatedGraphic = {
-                        geometry: feature.geometry,
-                        attributes: feature.attributes,
-                        symbol: relatedSymbol 
-                    };
-                    relatedGraphicsLayer.add(relatedGraphic);
-                }
-            });
-            
-            // Start the HTML content with the address from the index layer
-            let contentHTML = `<h3>${originalAddress}</h3>`;
+    placesLayer.queryFeatures(query).then(results => {
+        const features = results.features;
+        let contentHTML = `<h3>${originalAddress}</h3>`;
 
-            if (features.length > 0) {
-                // 2. Iterate and format the results
-                features.forEach((feature, index) => {
-                    const attributes = feature.attributes;
+        if (features.length > 0) {
+            features.forEach((feature, index) => {
+                const attributes = feature.attributes;
                     
                     // Helper function usage for clean display
                     const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
@@ -205,7 +163,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
                		const targetId = `placeDetail_${attributes.place_ID}_${index}`;
                		const contentTitle = `
-    				<a class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
+    				<a class="dropdown-toggle btn d-flex justify-content-between align-items-center" style="padding-left: 0px;" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
         			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
     				</a>
 					`;
@@ -266,53 +224,48 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
 
 // Function to highlight a visible point by coordinates (used by Zoom link)
 window.highlightPointByCoords = function(long, lat) {
+    // 1. Clear any existing highlight
     if (currentHighlight) {
         currentHighlight.remove();
         currentHighlight = null;
     }
+
+    // 2. Query the placesLayer to find the feature at these specific coordinates
+    // We use a small distance buffer (distance/units) to ensure we grab the point
+    //const query = placesLayer.createQuery();
+    //query.geometry = {
+    //const point = {
+        //type: "point",
+        //longitude: long,
+        //latitude: lat
+    //};
     
+    // Query the placesLayer using a small distance buffer (units are map meters)
     const query = placesLayer.createQuery();
-    
-    // Create a new map point from the coordinates
-    const pointGeometry = {
-        type: "point",
-        x: long,
-        y: lat,
-        spatialReference: { wkid: 4326 } // Assuming long/lat are WGS84 (4326)
-    };
-    
-    // Convert the point to the map's spatial reference (Web Mercator 3857)
-    //const webMercatorPoint = webMercatorUtils.geographicToWebMercator(mapPoint);
+    query.geometry = { type: "point", longitude: long, latitude: lat };
+    query.distance = 2; 
+    query.units = "meters";
+    query.spatialRelationship = "intersects";
+    query.returnGeometry = true;
 
-  pointsLayer.queryFeatures(query)
-        .then(results => {
-            if (results.features.length > 0) {
-                const graphicToHighlight = results.features[0];
+    placesLayer.queryFeatures(query).then(results => {
+        if (results.features.length > 0) {
+            const featureToHighlight = results.features[0];
 
-                // 4. Perform the highlight using the LayerView
-                viewElement.view.whenLayerView(pointsLayer).then(layerView => {
-                    currentHighlight = layerView.highlight(graphicToHighlight, {
-                        color: "red",
-                        haloColor: "white",
-                        haloOpacity: 0.8,
-                        width: 2
-                    });
-                    
-                    // Optional: Clear highlight after a short delay (e.g., 2 seconds)
-                    setTimeout(() => {
-                        if (currentHighlight) {
-                            currentHighlight.remove();
-                            currentHighlight = null;
-                        }
-                    }, 2000); 
-                });
-            } else {
-                console.warn("No feature found at the queried coordinates for highlighting.");
-            }
-        })
-        .catch(error => {
-            console.error("Error during highlight query:", error);
-        });
+            // 3. Obtain the LayerView to apply the visual highlight
+            viewElement.view.whenLayerView(placesLayer).then(layerView => {
+                currentHighlight = layerView.highlight(featureToHighlight);
+                
+                // Optional: Automatically remove the highlight after 3 seconds
+                // so the map doesn't stay cluttered
+               setTimeout(() => {
+                    if (currentHighlight) currentHighlight.remove();
+                }, 3000);
+            });
+        }
+    }).catch(error => {
+        console.error("Highlight query failed:", error);
+    });
 };
 
 // Globally define the Zoom to Tile Layer Extent function
@@ -415,21 +368,36 @@ reactiveUtils.watch(
     });
     
     // Initialize the FeatureLayer for the places results
-    placesLayer = new FeatureLayer({
-    	url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-        outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
-        });
+   placesLayer = new FeatureLayer({
+    url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
+    outFields: ["*"],
+    definitionExpression: "1=0",
+    renderer: {
+        type: "simple",
+        visualVariables: [sizeVV],
+        symbol: {
+            type: "simple-marker",
+            style: "circle",
+            color: "#efbb3c", 
+            size: "12px",     
+            outline: {
+                color: "#792530", 
+                width: 1
+            }
+        }
+    }
+});
     
     // Add the points layer to the map (at index 1, above the base map)
     viewElement.map.add(pointsLayer, 1);
     
     // Initialize Graphics Layer for related points
-	relatedGraphicsLayer = new GraphicsLayer({
-    	id: "relatedGraphics"
-	});
+	//relatedGraphicsLayer = new GraphicsLayer({
+    	//id: "relatedGraphics"
+	//});
 
 	// Add it to the map above the main pointsLayer
-	viewElement.map.add(relatedGraphicsLayer, 3);
+	viewElement.map.add(placesLayer, 2);
     
     // === Event Listeners for Map/Sidebar Interaction ===
     
@@ -475,79 +443,67 @@ reactiveUtils.watch(
     });
     
     // Listener for map click (hitTest for points)
-    viewElement.view.on("click", (event) => {
-        viewElement.view.hitTest(event).then(function(response) {
-        	const pointResult = response.results.find(result => result.graphic.layer === pointsLayer);
+viewElement.view.on("click", (event) => {
+    viewElement.view.hitTest(event).then(function(response) {
+        // 1. Check if we clicked an "Index" point (Red dots)
+        const indexResult = response.results.find(result => result.graphic.layer === pointsLayer);
+        // 2. Check if we clicked a "Detailed Result" point (Yellow dots)
+        const detailedResult = response.results.find(result => result.graphic.layer === placesLayer);
 
-            if (pointResult) {
-            //if (response.results.length > 0) {
-                const graphic = response.results[0].graphic;
-                const prefix = graphic.attributes;
-                const objectId = prefix.OBJECTID;
-				
-                // Clear the previous highlight
-                if (currentHighlight) {
-                    currentHighlight.remove();
-                    currentHighlight = null;
-                }
-                
-                // Highlight the clicked graphic
-                //viewElement.view.whenLayerView(pointsLayer).then((layerView) => {
-                    //currentHighlight = layerView.highlight(graphic, {
-                        //color: "red",
-                        //haloColor: "white",
-                        //haloOpacity: 0.8,
-                        //width: 2
-                    //});
-                //});
-                
-                if (pointsLayer) {
-                	pointsLayer.definitionExpression = `OBJECTID <> ${objectId}`;
-            	}
-                
-                clickedGraphic = graphic;
-                
-                // Center map, save state, and fetch details (call the reusable function)
-        
-            	const origFidValue = prefix.ORIG_FID;
-            	const addressFromIndex = prefix.orig_no_street_address;
-            
-            	lastSelectedOrigFid = origFidValue;
-            	lastSelectedAddress = addressFromIndex;
+        // Logic for clicking a Red Index Point
+        if (indexResult) {
+            const graphic = indexResult.graphic;
+            const prefix = graphic.attributes;
+            const objectId = prefix.OBJECTID;
 
-            	// Query the related features based on the clicked point
-            	queryAndDisplayPlaces(origFidValue, addressFromIndex);
-            
-            	// Show/expand sidebar
-            	featureNode.style.display = "block";
-            	if (window.innerWidth < 850) {
-                	featureNode.style.width= "80vw";
-                	featureNode.style.zindex="1001";
-            	} else {
-                	featureNode.style.width="25vw";
-                	viewElement.style.width="75vw";
-            	}
-            	collapseIcon.style.display = "block";
-            	expandIcon.style.display = "none";
-            
-            	// Switch to the 'Places' tab
-            	$('#pointsCounter').tab('show');
-            
-        } else {
-            // Clear highlight if map is clicked outside a feature
-            //if (currentHighlight) {
-                //currentHighlight.remove();
-            //}
+            // Clear previous highlight
+            if (currentHighlight) {
+                currentHighlight.remove();
+                currentHighlight = null;
+            }
+
+            // Temporarily hide the index point to show the detail underneath
             if (pointsLayer) {
-                pointsLayer.definitionExpression = "1=1";
+                pointsLayer.definitionExpression = `OBJECTID <> ${objectId}`;
             }
-            if (relatedGraphicsLayer) {
-                relatedGraphicsLayer.removeAll();
+
+            // Save global state and query the detail layer
+            lastSelectedOrigFid = prefix.ORIG_FID;
+            lastSelectedAddress = prefix.orig_no_street_address;
+            queryAndDisplayPlaces(prefix.ORIG_FID, prefix.orig_no_street_address);
+
+            // Open sidebar
+            featureNode.style.display = "block";
+            collapseIcon.style.display = "block";
+            expandIcon.style.display = "none";
+            $('#pointsCounter').tab('show');
+        }
+
+        // Logic for clicking a Yellow Detailed Point (Expand Accordion)
+        if (detailedResult) {
+            const feature = detailedResult.graphic;
+            const placeId = feature.attributes.place_ID;
+
+            // Find the specific accordion item in the sidebar
+            // The selector finds the ID that starts with 'placeDetail_' + the place_ID
+            const targetCollapse = document.querySelector(`[id^="placeDetail_${placeId}_"]`);
+            
+            if (targetCollapse) {
+                // Programmatically expand the Bootstrap collapse
+                $(targetCollapse).collapse('show');
+                // Smooth scroll the sidebar to this record
+                targetCollapse.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+        }
+
+        // Logic for clicking map background (Reset)
+        if (!indexResult && !detailedResult) {
+            if (pointsLayer) pointsLayer.definitionExpression = "1=1";
+            if (placesLayer) placesLayer.definitionExpression = "1=0";
             pointsInfo.innerHTML = "No points selected";
         }
-        });
     });
+});
 
     // Listener for Points Layer visibility switch
     pointsSwitch.addEventListener("calciteSwitchChange", () => {
