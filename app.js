@@ -161,9 +161,9 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
     				.filter(part => part) 
    					.join(" ");
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
-               		const targetId = `placeDetail_${attributes.place_ID}_${index}`;
+               		const targetId = `placeDetail_${attributes.place_ID}_${attributes.OBJECTID}`;
                		const contentTitle = `
-    				<a class="dropdown-toggle btn d-flex justify-content-between align-items-center" style="padding-left: 0px;" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
+    				<a style="padding-left:0px;" class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
         			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
     				</a>
 					`;
@@ -229,35 +229,21 @@ window.highlightPointByCoords = function(long, lat) {
         currentHighlight.remove();
         currentHighlight = null;
     }
-
-    // 2. Query the placesLayer to find the feature at these specific coordinates
-    // We use a small distance buffer (distance/units) to ensure we grab the point
-    //const query = placesLayer.createQuery();
-    //query.geometry = {
-    //const point = {
-        //type: "point",
-        //longitude: long,
-        //latitude: lat
-    //};
     
     // Query the placesLayer using a small distance buffer (units are map meters)
     const query = placesLayer.createQuery();
     query.geometry = { type: "point", longitude: long, latitude: lat };
-    query.distance = 2; 
+    query.distance = 3; 
     query.units = "meters";
-    query.spatialRelationship = "intersects";
     query.returnGeometry = true;
 
     placesLayer.queryFeatures(query).then(results => {
         if (results.features.length > 0) {
-            const featureToHighlight = results.features[0];
-
-            // 3. Obtain the LayerView to apply the visual highlight
+            const graphicToHighlight = results.features[0];
             viewElement.view.whenLayerView(placesLayer).then(layerView => {
-                currentHighlight = layerView.highlight(featureToHighlight);
+                currentHighlight = layerView.highlight(graphicToHighlight);
                 
-                // Optional: Automatically remove the highlight after 3 seconds
-                // so the map doesn't stay cluttered
+                // Automatically remove the highlight after 3 seconds
                setTimeout(() => {
                     if (currentHighlight) currentHighlight.remove();
                 }, 3000);
@@ -418,6 +404,37 @@ reactiveUtils.watch(
         handlePointSelection(objectId);
     });
 
+const loaderContainer = document.getElementById("loader-container");
+
+    // Function to show/hide loader based on layer status
+    const trackLoadingStatus = (layer) => {
+        if (!layer) return;
+
+        viewElement.view.whenLayerView(layer).then((layerView) => {
+            // Initial show
+            loaderContainer.style.display = "block";
+
+            // Watch the 'updating' property
+            reactiveUtils.watch(
+                () => layerView.updating,
+                (updating) => {
+                    if (!updating) {
+                        // Data has finished rendering
+                        loaderContainer.style.display = "none";
+                    } else {
+                        // Show loader if filtering or zooming triggers a new fetch
+                        loaderContainer.style.display = "block";
+                    }
+                }
+            );
+        }).catch(err => {
+            console.warn("LayerView not ready:", err);
+        });
+    };
+
+    // Start tracking the initial pointsLayer
+    trackLoadingStatus(pointsLayer);
+    
     // Listener for typing in the search bar
     searchBar.addEventListener('input', () => {
         debounceQuery(viewElement.extent);
@@ -445,59 +462,60 @@ reactiveUtils.watch(
     // Listener for map click (hitTest for points)
 viewElement.view.on("click", (event) => {
     viewElement.view.hitTest(event).then(function(response) {
-        // 1. Check if we clicked an "Index" point (Red dots)
-        const indexResult = response.results.find(result => result.graphic.layer === pointsLayer);
-        // 2. Check if we clicked a "Detailed Result" point (Yellow dots)
+        // Find if we clicked a Detailed Result (Yellow) or an Index Point (Red)
         const detailedResult = response.results.find(result => result.graphic.layer === placesLayer);
+        const indexResult = response.results.find(result => result.graphic.layer === pointsLayer);
 
-        // Logic for clicking a Red Index Point
+        // 1. Logic for clicking a Yellow Detailed Point (Expand Accordion)
+        if (detailedResult) {
+    		const feature = detailedResult.graphic;
+    		const attrs = feature.attributes;
+    
+    		// Use the exact ID combining place_ID and OBJECTID
+    		const specificId = `placeDetail_${attrs.place_ID}_${attrs.OBJECTID}`;
+    		const targetCollapse = document.getElementById(specificId);
+    
+    		if (targetCollapse) {
+        		// Close any currently open ones first (optional accordion behavior)
+        		$('#pointsInfo .collapse').collapse('hide'); 
+        
+        		// Open the specific one
+        		$(targetCollapse).collapse('show');
+        		targetCollapse.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    		}
+    		return;
+		}
+
+        // 2. Logic for clicking a Red Index Point (Initial Selection)
         if (indexResult) {
             const graphic = indexResult.graphic;
             const prefix = graphic.attributes;
             const objectId = prefix.OBJECTID;
-
-            // Clear previous highlight
+            
+            // Clear existing highlights
             if (currentHighlight) {
                 currentHighlight.remove();
                 currentHighlight = null;
             }
 
-            // Temporarily hide the index point to show the detail underneath
+            // Hide the red dot to show the yellow detail underneath
             if (pointsLayer) {
                 pointsLayer.definitionExpression = `OBJECTID <> ${objectId}`;
             }
 
-            // Save global state and query the detail layer
+            // Save state and fetch detailed records
             lastSelectedOrigFid = prefix.ORIG_FID;
             lastSelectedAddress = prefix.orig_no_street_address;
             queryAndDisplayPlaces(prefix.ORIG_FID, prefix.orig_no_street_address);
 
-            // Open sidebar
+            // Open and switch sidebar tabs
             featureNode.style.display = "block";
             collapseIcon.style.display = "block";
             expandIcon.style.display = "none";
             $('#pointsCounter').tab('show');
-        }
-
-        // Logic for clicking a Yellow Detailed Point (Expand Accordion)
-        if (detailedResult) {
-            const feature = detailedResult.graphic;
-            const placeId = feature.attributes.place_ID;
-
-            // Find the specific accordion item in the sidebar
-            // The selector finds the ID that starts with 'placeDetail_' + the place_ID
-            const targetCollapse = document.querySelector(`[id^="placeDetail_${placeId}_"]`);
-            
-            if (targetCollapse) {
-                // Programmatically expand the Bootstrap collapse
-                $(targetCollapse).collapse('show');
-                // Smooth scroll the sidebar to this record
-                targetCollapse.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }
-
-        // Logic for clicking map background (Reset)
-        if (!indexResult && !detailedResult) {
+        } 
+        // Reset if clicking empty map space
+        else if (!detailedResult && !indexResult) {
             if (pointsLayer) pointsLayer.definitionExpression = "1=1";
             if (placesLayer) placesLayer.definitionExpression = "1=0";
             pointsInfo.innerHTML = "No points selected";
@@ -955,6 +973,8 @@ function displayResults(results) {
     viewElement.graphics.removeAll(); // Clear previous map boundary
     viewElement.graphics.addMany(results.features); // Add the new map boundary graphic
     pointsLayer = newPointsLayer;
+    
+    trackLoadingStatus(pointsLayer);
 }
 
 // Listener for Opacity Slider input
