@@ -52,6 +52,8 @@ let lastSelectedOrigFid = null;
 let lastSelectedAddress = null;
 let relatedGraphicsLayer;
 const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
+let currentLoaderHandle = null; // Stores the active watcher
+let loadingTimer; // Stores the debounce timer
 
 // Helper function to handle map centering, highlighting, and fetching related details
 function handlePointSelection(objectId) {
@@ -152,6 +154,9 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         if (features.length > 0) {
             features.forEach((feature, index) => {
                 const attributes = feature.attributes;
+                const y = feature.geometry.y;
+                	const x = feature.geometry.x;
+                	const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
                     
                     // Helper function usage for clean display
                     const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
@@ -163,7 +168,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
                		const targetId = `placeDetail_${attributes.place_ID}_${attributes.OBJECTID}`;
                		const contentTitle = `
-    				<a style="padding-left:0px;" class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
+    				<a style="padding-left:0px;" onclick="highlightPointByCoords(${long}, ${lat})" class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
         			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
     				</a>
 					`;
@@ -186,9 +191,6 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         			const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
         			const currMuni = createStringIfNotNull(`<b>Current Municipality:</b> `,attributes.curr_city,`<br>`);
         			const mapURL = attributes.map_url;
-        			const y = feature.geometry.y;
-                	const x = feature.geometry.x;
-                	const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
 
                     contentHTML += `
                         <div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
@@ -246,7 +248,7 @@ window.highlightPointByCoords = function(long, lat) {
                 // Automatically remove the highlight after 3 seconds
                setTimeout(() => {
                     if (currentHighlight) currentHighlight.remove();
-                }, 3000);
+                }, 5000);
             });
         }
     }).catch(error => {
@@ -323,7 +325,48 @@ const points = {
 
 viewElement.addEventListener("arcgisViewReadyChange", () => {
     // === Debounce Function and Map Extent Watcher ===
+ const loaderContainer = document.getElementById("loader-container");
     
+    // Start with the loader visible
+    loaderContainer.style.display = "block";
+
+    // Wait until the map environment is stable for the VERY FIRST time
+    reactiveUtils.whenOnce(() => !viewElement.view.updating).then(() => {
+        console.log("Initial Map Load Complete");
+        loaderContainer.style.display = "none";
+        // Now hand off to the pointsLayer tracker
+        trackLoadingStatus(pointsLayer);
+    });
+
+    // Function to show/hide loader based on layer status
+const trackLoadingStatus = (layer) => {
+    const loaderContainer = document.getElementById("loader-container");
+    if (!layer || !loaderContainer) return;
+
+    if (currentLoaderHandle) {
+        currentLoaderHandle.remove();
+    }
+
+    viewElement.view.whenLayerView(layer).then((layerView) => {
+        currentLoaderHandle = reactiveUtils.watch(
+            () => layerView.updating || viewElement.view.updating, // Watch both layer and view
+            (updating) => {
+                clearTimeout(loadingTimer);
+                if (updating) {
+                    loadingTimer = setTimeout(() => {
+                        loaderContainer.style.display = "block";
+                    }, 300);
+                    
+                    // SAFETY NET: Force hide after 5 seconds if something hangs
+                    setTimeout(() => { loaderContainer.style.display = "none"; }, 5000);
+                } else {
+                    loaderContainer.style.display = "none";
+                }
+            }
+        );
+    });
+};
+
 // Watch map extent changes (pan/zoom) to update the map list dynamically
 reactiveUtils.watch(
   () => viewElement.view.extent, 
@@ -404,33 +447,6 @@ reactiveUtils.watch(
         handlePointSelection(objectId);
     });
 
-const loaderContainer = document.getElementById("loader-container");
-
-    // Function to show/hide loader based on layer status
-    const trackLoadingStatus = (layer) => {
-        if (!layer) return;
-
-        viewElement.view.whenLayerView(layer).then((layerView) => {
-            // Initial show
-            loaderContainer.style.display = "block";
-
-            // Watch the 'updating' property
-            reactiveUtils.watch(
-                () => layerView.updating,
-                (updating) => {
-                    if (!updating) {
-                        // Data has finished rendering
-                        loaderContainer.style.display = "none";
-                    } else {
-                        // Show loader if filtering or zooming triggers a new fetch
-                        loaderContainer.style.display = "block";
-                    }
-                }
-            );
-        }).catch(err => {
-            console.warn("LayerView not ready:", err);
-        });
-    };
 
     // Start tracking the initial pointsLayer
     trackLoadingStatus(pointsLayer);
@@ -470,6 +486,9 @@ viewElement.view.on("click", (event) => {
         if (detailedResult) {
     		const feature = detailedResult.graphic;
     		const attrs = feature.attributes;
+    		
+    		const [long, lat] = webMercatorUtils.xyToLngLat(feature.geometry.x, feature.geometry.y);
+    		highlightPointByCoords(long, lat);
     
     		// Use the exact ID combining place_ID and OBJECTID
     		const specificId = `placeDetail_${attrs.place_ID}_${attrs.OBJECTID}`;
