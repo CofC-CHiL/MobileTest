@@ -110,6 +110,24 @@ hr {
 	border-radius: var(--border-radius) !important;
 }
 
+.btn:focus {
+  outline: none; 
+  box-shadow: none;
+}
+
+.btn:focus {
+  outline: none; 
+  box-shadow: none;
+}
+
+.histOptions{
+padding-left: 0px;
+}
+
+.histOptions:hover{
+padding-left: 0px;
+background-color: var(--tertiary-color);
+}
 /*
 |--------------------------------------------------------------------------
 | Navigation Bar (Navbar) Styles
@@ -314,6 +332,19 @@ arcgis-map {
 /* Adjust button position when expanded */
 .map-area #feature-node[style*="display: block"] + .expandButton {
 	left: 25vw; /* Position button to the right of the 25vw panel */
+}
+
+#loader-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    pointer-events: none; /* Allows user to click through it if necessary */
+    background: rgba(255, 255, 255, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    display: none; /* Hidden by default */
 }
 
 /*
