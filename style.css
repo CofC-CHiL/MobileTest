@@ -194,15 +194,17 @@ background-color: var(--tertiary-color);
 .button1 > label {
     background-color: var(--primary-color);
     color: var(--text-light);
+    height: var(--header-height);
 }
 
 .button1 > .active {
-    background-color: var(--secondary-color) ; !important;
+    background-color: var(--tertiary-color) ; !important;
     color: var(--text-light) ; !important;
 }
 
 .button1 > label:hover {
-    background-color: var(--tertiary-color);
+    background-color: var(--secondary-color);
+    color: var(--text-dark) ; !important;
 }
 
 /* Button Group 2 Styles (e.g., standard buttons) */
@@ -300,10 +302,10 @@ arcgis-map {
     background-color: var(--secondary-color);
 }
 
-/* Hides the points filter section initially (used in JavaScript) */
+/* Hides the points filter section initially (used in JavaScript) 
 #pointsFilter {
     display: none;
-}
+}*/
 
 /* Button to expand/collapse the feature-node panel */
 .expandButton {
