@@ -24,6 +24,7 @@ const pointsSwitch = document.querySelector("calcite-switch"); // Switch to togg
 const resultsList = document.querySelector("#result-list"); // UL for Map results (maps tab)
 const pointsList = document.querySelector("#point-list"); // UL for Point results (places tab)
 const pointListElement = document.getElementById("point-list"); // Reference for point list
+const personListElement = document.getElementById("people-list"); // Reference for point list
 const mapsInfo = document.getElementById('mapsInfo'); // Div to display selected map information
 const mapsCounter = document.getElementById("mapsCounter"); // Tab link for Maps count
 const pointsCounter = document.getElementById("pointsCounter"); // Tab link for Places count
@@ -48,12 +49,14 @@ let currentHighlight = null; // Reference to the current highlight graphic
 let tileLayer; // Variable to hold the dynamically loaded TileLayer
 let pointsLayer;
 let placesLayer;
+let peopleLayer;
 let lastSelectedOrigFid = null;
 let lastSelectedAddress = null;
 let relatedGraphicsLayer;
 const reactiveUtils = await $arcgis.import("@arcgis/core/core/reactiveUtils.js");
 let currentLoaderHandle = null; // Stores the active watcher
 let loadingTimer; // Stores the debounce timer
+let timelineFilter = "1=1";
 
 // Helper function to handle map centering, highlighting, and fetching related details
 function handlePointSelection(objectId) {
@@ -116,7 +119,10 @@ function handlePointSelection(objectId) {
 //See if any variable is null
 function createStringIfNotNull(...variables) {
     const dataPart = variables[1]; 
-    if (dataPart === null || dataPart === undefined || dataPart.trim() === '') {
+    if (dataPart === null || dataPart === undefined) {
+        return null;
+    }
+    if (String(dataPart).trim() === '') {
         return null;
     }
     return variables.join('');
@@ -317,6 +323,7 @@ const points = {
         }
     }
 };
+
     
 // ====================================================================
 // 2. ARCGIS VIEW READY HANDLER
@@ -382,6 +389,7 @@ reactiveUtils.watch(
         timeout = setTimeout(() => {
             queryCount(extent); // Queries historic maps in the current extent
             queryPoints(searchBar.value.trim()); // Re-query points based on extent/search
+            queryPeople(searchBar.value.trim()); 
         }, 500); // Wait 500ms after the user stops panning/zooming
     }
     
@@ -416,6 +424,22 @@ reactiveUtils.watch(
         }
     }
 });
+
+	peopleLayer = new FeatureLayer({
+    url: "https://lyre.cofc.edu/server/rest/services/shoc/DBO_people_cd1888/FeatureServer/64",
+    outFields: ["*"],
+    renderer: {
+        type: "simple",
+        visualVariables: [sizeVV],
+        symbol: {
+            type: "simple-marker",
+            style: "circle",
+            color: "#007bff", // Blue for people
+            size: "12px",
+            outline: { color: "#ffffff", width: 1 }
+        }
+    }
+});
     
     // Add the points layer to the map (at index 1, above the base map)
     viewElement.map.add(pointsLayer, 1);
@@ -427,6 +451,8 @@ reactiveUtils.watch(
 
 	// Add it to the map above the main pointsLayer
 	viewElement.map.add(placesLayer, 2);
+	
+	viewElement.map.add(peopleLayer, 3);
     
     // === Event Listeners for Map/Sidebar Interaction ===
     
@@ -453,7 +479,10 @@ reactiveUtils.watch(
     
     // Listener for typing in the search bar
     searchBar.addEventListener('input', () => {
+    	const text = searchBar.value.trim();
         debounceQuery(viewElement.extent);
+        queryPoints(text);
+    	queryPeople(text);
         // Show/expand sidebar when search input starts
         featureNode.style.display = "block";
         if (window.innerWidth < 850) {
@@ -481,6 +510,7 @@ viewElement.view.on("click", (event) => {
         // Find if we clicked a Detailed Result (Yellow) or an Index Point (Red)
         const detailedResult = response.results.find(result => result.graphic.layer === placesLayer);
         const indexResult = response.results.find(result => result.graphic.layer === pointsLayer);
+        const personResult = response.results.find(result => result.graphic.layer === peopleLayer);
 
         // 1. Logic for clicking a Yellow Detailed Point (Expand Accordion)
         if (detailedResult) {
@@ -504,6 +534,12 @@ viewElement.view.on("click", (event) => {
     		}
     		return;
 		}
+		
+		if (personResult) {
+    		const graphic = personResult.graphic;
+    		openPeoplePanel(graphic);
+    		return;
+		}
 
         // 2. Logic for clicking a Red Index Point (Initial Selection)
         if (indexResult) {
@@ -519,8 +555,8 @@ viewElement.view.on("click", (event) => {
 
             // Hide the red dot to show the yellow detail underneath
             if (pointsLayer) {
-                pointsLayer.definitionExpression = `OBJECTID <> ${objectId}`;
-            }
+        		pointsLayer.definitionExpression = `${timelineFilter} AND OBJECTID <> ${objectId}`;
+    		}
 
             // Save state and fetch detailed records
             lastSelectedOrigFid = prefix.ORIG_FID;
@@ -535,9 +571,9 @@ viewElement.view.on("click", (event) => {
         } 
         // Reset if clicking empty map space
         else if (!detailedResult && !indexResult) {
-            if (pointsLayer) pointsLayer.definitionExpression = "1=1";
-            if (placesLayer) placesLayer.definitionExpression = "1=0";
-            pointsInfo.innerHTML = "No points selected";
+            if (pointsLayer) pointsLayer.definitionExpression = timelineFilter;
+    		if (placesLayer) placesLayer.definitionExpression = "1=0";
+    		pointsInfo.innerHTML = "No points selected";
         }
     });
 });
@@ -553,34 +589,24 @@ viewElement.view.on("click", (event) => {
         
         // Update active button styling
         const buttons = pointsFilterMenu.querySelectorAll('label');
-        buttons.forEach(button => {
-            button.classList.remove('active');
-        });
-
-        // Add the 'active' class to the parent label of the clicked input
-        event.target.closest('label').classList.add('active');
+    	buttons.forEach(button => button.classList.remove('active'));
+    	event.target.closest('label').classList.add('active');
         
-        let pointsFilterExpression = "";
-
-        // Determine the new definition expression for the points layer
-        switch (selectedValue) {
-            case "brick":
-                pointsFilterExpression = "prime_material = 'brick'";
-                break;
-            case "wood":
-                pointsFilterExpression = "prime_material = 'wood frame'";
-                break;
-            case "both":
-            default:
-                pointsFilterExpression = "1=1"; // Show all points
-                break;
+        // Toggle layer visibility
+if (selectedValue === "places") {
+        pointsLayer.visible = true;
+        if (peopleLayer) peopleLayer.visible = false;
+    } else if (selectedValue === "people") {
+        pointsLayer.visible = false;
+        if (peopleLayer) {
+            peopleLayer.visible = true;
+            queryPeople(searchBar.value.trim()); // Populate list when switching
         }
-        
-        // Apply the filter to the layer
-        if (pointsLayer) {
-            pointsLayer.definitionExpression = pointsFilterExpression;
-        }
-    });
+    } else if (selectedValue === "both") {
+        pointsLayer.visible = true;
+        if (peopleLayer) peopleLayer.visible = true;
+    }
+});
 
     // Listener for Sidebar Expand/Collapse button
     expandCollapse.addEventListener('click', () => {
@@ -599,6 +625,12 @@ viewElement.view.on("click", (event) => {
             expandIcon.style.display = "none";
         }
     });
+    
+    reactiveUtils.whenOnce(() => !viewElement.view.updating).then(() => {
+    updateSliders(); // Run the initial filter only after the map is ready
+    queryPeople("");
+});
+
 });
 
 // ====================================================================
@@ -804,6 +836,59 @@ function queryPoints(searchText) {
             pointListElement.innerHTML = `<li class="list-group-item">Error retrieving search results.</li>`;
             pointsCounter.innerHTML = `Places (0)`;
         });
+}
+
+function queryPeople(searchText) {
+    const peopleListElement = document.getElementById("people-list");
+    const peopleCounter = document.getElementById("peopleCounter");
+    
+    if (!peopleLayer) return;
+    
+    // Clear list and show default if no search
+    if (!searchText) {
+        peopleListElement.innerHTML = `<li class="list-group-item">Use the search bar to search people on the map.</li>`;
+        peopleCounter.innerHTML = `People`;
+        return; 
+    }
+
+    // Build the query
+    const searchFilter = `(UPPER(USER_Name_as_given) LIKE '%${searchText.toUpperCase()}%' OR 
+                     UPPER(USER_Occupation_Title) LIKE '%${searchText.toUpperCase()}%' OR 
+                     UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%') OR
+                     UPPER(USER_Residence__r_) LIKE '%${searchText.toUpperCase()}%' OR 
+                     UPPER(USER_Given_Name) LIKE '%${searchText.toUpperCase()}%' OR
+                     UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' 
+                     `;
+
+    const peopleQuery = {
+        where: searchFilter,
+        outFields: ["*"],
+        returnGeometry: true,
+        returnDistinctValues: false
+    };
+
+    peopleLayer.queryFeatures(peopleQuery).then((results) => {
+        peopleListElement.innerHTML = "";
+        const features = results.features;
+        peopleCounter.innerHTML = `People (${features.length})`;
+
+        if (features.length === 0) {
+            peopleListElement.innerHTML = '<li class="list-group-item">No records found matching your search.</li>';
+            return;
+        }
+
+        features.forEach((feature) => {
+            const attr = feature.attributes;
+            const li = document.createElement("li");
+            li.className = "list-group-item";
+            li.innerHTML = `<h4>${attr.USER_Name_as_given} (${attr.USER_Occupation_Title})</h4>`;
+            
+            li.addEventListener("click", () => {
+        		openPeoplePanel(feature);
+    		});
+            peopleListElement.appendChild(li);
+        });
+    }).catch(error => console.error("Error querying people:", error));
 }
 //	Listener for clicking the source map link in the points info tab
 pointsInfo.addEventListener("click", (event) => {
@@ -1028,26 +1113,125 @@ function updateSliders() {
     // Update the displayed min/max year values
     dateMinValue.textContent = minVal;
     dateMaxValue.textContent = maxVal;
-
+    
     // Debounce the map query to avoid excessive calls while sliding
     clearTimeout(sliderTimeout);
     sliderTimeout = setTimeout(() => {
+    	if (!placesLayer || !pointsLayer) {
+            console.log("Layers not ready yet...");
+            return;
+        }
+    	
         queryCount(viewElement.extent); // Re-query maps with new date range
         // REFRESH POINTS LIST if search is active
+       const syncPointsWithTimeline = () => {
+            const pointQuery = placesLayer.createQuery();
+            pointQuery.where = `CAST(source_year AS INTEGER) >= ${minVal} AND CAST(source_year AS INTEGER) <= ${maxVal}`;
+            pointQuery.outFields = ["place_ID"];
+            pointQuery.returnDistinctValues = true;
+            pointQuery.returnGeometry = false;
+
+            placesLayer.queryFeatures(pointQuery).then((results) => {
+                const validIds = results.features.map(f => f.attributes.place_ID).filter(id => id);
+                
+                if (validIds.length > 0) {
+                    timelineFilter = `ORIG_FID IN (${validIds.join(",")})`;
+                } else {
+                    timelineFilter = "1=0";
+                }
+                
+                // Apply the filter to the red dots
+                pointsLayer.definitionExpression = timelineFilter;
+
+            }).catch(err => console.error("Timeline Sync Error:", err));
+        };
+
+        syncPointsWithTimeline();
+
+        // 3. Refresh Search/Selection (Existing logic)
         const searchText = searchBar.value.trim();
         if (searchText) {
             queryPoints(searchText);
         }
-
-        // REFRESH RELATED DETAILS if a point is currently selected
         if (lastSelectedOrigFid !== null && lastSelectedAddress !== null) {
             queryAndDisplayPlaces(lastSelectedOrigFid, lastSelectedAddress);
         }
-    }, 300); // 300ms delay for debouncing
+    }, 300);
 }
-
 // Listeners for both date slider handles
 dateSlider_l.addEventListener('input', updateSliders);
 dateSlider_r.addEventListener('input', updateSliders);
 
-updateSliders(); // Initial call to set the display values and run the first query
+function openPeoplePanel(feature) {
+    if (!feature || !feature.attributes) return;
+    const attr = feature.attributes;
+
+    // 1. Open and Switch Sidebar
+    featureNode.style.display = "block";
+    if (window.innerWidth < 850) {
+        featureNode.style.width = "80vw";
+    } else {
+        featureNode.style.width = "25vw";
+        viewElement.style.width = "75vw";
+    }
+    collapseIcon.style.display = "block";
+    expandIcon.style.display = "none";
+    $('#peopleCounter').tab('show');
+
+    // 2. Extract Geometry safely
+    let lon, lat;
+    if (feature.geometry) {
+        lon = feature.geometry.longitude || feature.geometry.x;
+        lat = feature.geometry.latitude || feature.geometry.y;
+    } else {
+        console.error("No geometry found for this feature.");
+        return;
+    }
+
+    // 3. Prepare the Content Strings
+    const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
+    const concatName = nameParts.filter(part => part && String(part).trim() !== '').join(" ") 
+                       || attr.USER_Name_as_given 
+                       || "Unknown Name";
+
+    const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
+    const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
+    const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
+    const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
+    const boardRent = createStringIfNotNull(`<b>Boards or Rents:</b> `, attr.USER_r_bds, `<br>`);
+    const POC = createStringIfNotNull(`<b>Person of Color:</b> `, attr.USER_POC, `<br>`);
+    const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
+
+    // 4. Build the HTML
+    let contentHTML = `
+        <div class="person-detail-header">
+            <h3>${concatName}</h3>
+        </div>
+        <div class="person-detail-body" style="padding-top: 10px;">
+            ${occupation || ''}
+            ${businessName || ''}
+            ${office || ''}
+            ${residence || ''}
+            ${description || ''}
+            ${boardRent || ''}
+            ${POC || ''}
+            <hr>
+            <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>
+        </div>
+    `;
+
+    // 5. Update DOM
+    document.getElementById('personInfo').innerHTML = contentHTML;
+
+    // 6. Map Actions (Zoom and Highlight)
+    viewElement.view.goTo({ target: [lon, lat], zoom: 18 });
+
+    if (currentHighlight) currentHighlight.remove();
+    
+    if (peopleLayer) {
+        peopleLayer.visible = true; 
+        viewElement.view.whenLayerView(peopleLayer).then(lv => {
+            currentHighlight = lv.highlight(feature);
+        }).catch(err => console.warn("Highlight failed:", err));
+    }
+}
