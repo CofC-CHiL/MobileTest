@@ -339,10 +339,8 @@ viewElement.addEventListener("arcgisViewReadyChange", () => {
 
     // Wait until the map environment is stable for the VERY FIRST time
     reactiveUtils.whenOnce(() => !viewElement.view.updating).then(() => {
-        console.log("Initial Map Load Complete");
-        loaderContainer.style.display = "none";
-        // Now hand off to the pointsLayer tracker
-        trackLoadingStatus(pointsLayer);
+        updateSliders(); 
+    	queryPeople("");
     });
 
     // Function to show/hide loader based on layer status
@@ -857,7 +855,8 @@ function queryPeople(searchText) {
                      UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%') OR
                      UPPER(USER_Residence__r_) LIKE '%${searchText.toUpperCase()}%' OR 
                      UPPER(USER_Given_Name) LIKE '%${searchText.toUpperCase()}%' OR
-                     UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' 
+                     UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
+                     UPPER(USER_Salutation) LIKE '%${searchText.toUpperCase()}%' 
                      `;
 
     const peopleQuery = {
@@ -879,11 +878,18 @@ function queryPeople(searchText) {
 
         features.forEach((feature) => {
             const attr = feature.attributes;
+            const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
+    		const concatName = nameParts.filter(part => part && String(part).trim() !== '').join(" ") 
+                       || attr.USER_Name_as_given 
+                       || "Unknown Name";
             const li = document.createElement("li");
             li.className = "list-group-item";
-            li.innerHTML = `<h4>${attr.USER_Name_as_given} (${attr.USER_Occupation_Title})</h4>`;
+            li.innerHTML = `${concatName}`;
             
             li.addEventListener("click", () => {
+            	const allItems = peopleListElement.querySelectorAll('li');
+                allItems.forEach(item => item.classList.remove('active'));
+                li.classList.add('active');
         		openPeoplePanel(feature);
     		});
             peopleListElement.appendChild(li);
