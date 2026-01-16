@@ -43,7 +43,12 @@
     </div>
 </div>
 
-
+<div class="px-2">
+            <calcite-label layout="inline" class="text-white">
+					<calcite-switch value="True" checked></calcite-switch>
+					<calcite-icon icon="pin-tear" scale="m" style="color: var(--secondary-color);"/>
+				</calcite-label>
+        </div>
     <div class="dropdown menu-end ms-lg-auto">
         <button type="button" id="navbarDropdownMenuLink" class="button2 collapser h-100 btn nav-item" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             <img src="https://upload.wikimedia.org/wikipedia/commons/5/59/Hamburger_icon_white.svg" alt="hamburger menu">
@@ -55,6 +60,7 @@
             <a class="dropdown-item" target="_blank" href="#">Access the Data</a>
         </div>
     </div>
+    
 </nav>
 
 <nav class="navbar-expand-md d-flex navbar justify-content-between" id="navRow2">
@@ -79,30 +85,24 @@
     </div>
 
     <div class="button2 d-flex nav-item align-items-center h-100 menu-end">
-        <div class="px-2">
-            <calcite-label layout="inline" class="text-white">
-					<calcite-switch value="True" checked></calcite-switch>
-					<calcite-icon icon="pin-tear" scale="m" style="color: var(--secondary-color);"/>
-				</calcite-label>
-        </div>
         
         <div id="pointsFilter" role="group" aria-label="People and Places Menu" class="button1 btn-group btn-group-toggle h-100 menu-end">
-            <label class="btn button1 text-center d-flex align-items-center " for="brick">
-                <input type="radio" class="btn-check" name="btnradio" id="brick" autocomplete="off">
+            <label class="btn button1 text-center d-flex align-items-center " for="places">
+                <input type="radio" class="btn-check" name="btnradio" id="places" autocomplete="off">
                 <span class="d-flex align-items-center">
-                    <calcite-icon icon="user"></calcite-icon>Brick
+                    <calcite-icon icon="locator"></calcite-icon>Places
                 </span>
             </label>
-            <label class="btn text-center d-flex align-items-center " for="wood">
-                <input type="radio" class="btn-check" name="btnradio" id="wood" autocomplete="off">
+            <label class="btn text-center d-flex align-items-center " for="people">
+                <input type="radio" class="btn-check" name="btnradio" id="people" autocomplete="off">
                 <span class="d-flex align-items-center">
-                    <calcite-icon icon="locator"></calcite-icon>Wood
+                    <calcite-icon icon="user"></calcite-icon>People
                 </span>
             </label>
             <label class="btn active text-center d-flex align-items-center " for="both">
                 <input type="radio" class="btn-check" name="btnradio" id="both" autocomplete="off" checked>
                 <span class="d-flex align-items-center">
-                    <calcite-icon icon="globe"></calcite-icon>Everything
+                    <calcite-icon icon="globe"></calcite-icon>Both
                 </span>
             </label>
         </div>
@@ -114,10 +114,13 @@
     <div id="feature-node">
         <ul class="nav nav-tabs nav-fill" role="tablist">
             <li class="nav-item">
+                <a class="nav-link active" id="mapsCounter" data-toggle="tab" href="#selectedDiv" role="tab" aria-controls="selectedDiv" aria-selected="true">Maps</a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" id="pointsCounter" data-toggle="tab" href="#resultsDiv" role="tab" aria-controls="resultsDiv" aria-selected="false">Places</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link active" id="mapsCounter" data-toggle="tab" href="#selectedDiv" role="tab" aria-controls="selectedDiv" aria-selected="true">Maps</a>
+                <a class="nav-link" id="peopleCounter" data-toggle="tab" href="#peopleDiv" role="tab" aria-controls="peopleDiv" aria-selected="false">People</a>
             </li>
         </ul>
 
@@ -143,6 +146,17 @@
                 </div>
                 <hr>
                 <div class="selectedBox rounded" id="mapsInfo">No map selected</div>
+            </div>
+            <div id="peopleDiv" class="tab-pane fade show" role="tabpanel" aria-labelledby="peopleCounter">
+                <h2>Results</h2>
+                
+                <div class="resultBox">
+                    <ul id="people-list" class="list-group">
+                        <li id="defaultOption" value="1=0" class="list-group-item">Lorem Ipsum</li>
+                    </ul>
+                </div>
+                <hr>
+                <div class="selectedBox rounded" id="personInfo">No person point selected</div>
             </div>
         </div>
     </div>
@@ -178,7 +192,7 @@
             <div class="map-floater">Right-click and drag to rotate map.</div>
         </arcgis-placement>
     		<div id="loader-container">
-        		<calcite-loader id="main-loader" label="Loading points..." text="Loading Points..." type="indeterminate" scale="m"></calcite-loader>
+        		<calcite-loader id="main-loader" label="Loading..." text="Loading..." type="indeterminate" scale="m"></calcite-loader>
     		</div>
     </arcgis-map>
 </div>
