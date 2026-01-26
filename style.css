@@ -302,10 +302,10 @@ arcgis-map {
     background-color: var(--secondary-color);
 }
 
-/* Hides the points filter section initially (used in JavaScript) 
+/* Hides the points filter section initially (used in JavaScript) */
 #pointsFilter {
     display: none;
-}*/
+}
 
 /* Button to expand/collapse the feature-node panel */
 .expandButton {
