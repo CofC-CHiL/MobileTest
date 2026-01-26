@@ -155,7 +155,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
 
     placesLayer.queryFeatures(query).then(results => {
         const features = results.features;
-        let contentHTML = `<h3>${originalAddress}</h3>`;
+        let contentHTML = `<h3>Structures at ${originalAddress}</h3>`;
 
         if (features.length > 0) {
             features.forEach((feature, index) => {
@@ -230,6 +230,71 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         });
 }
 
+function queryAndDisplayPeople(streetAddress) {
+    if (!streetAddress) return;
+
+    // Sanitize address for SQL
+    const sanitizedAddress = streetAddress.replace(/'/g, "''");
+    const where = `USER_Street_number_name = '${sanitizedAddress}'`;
+
+    const query = peopleLayer.createQuery();
+    query.where = where;
+    query.outFields = ["*"];
+    query.returnGeometry = true;
+
+    document.getElementById('personInfo').innerHTML = `<p>Loading people at ${streetAddress}...</p>`;
+
+    peopleLayer.queryFeatures(query).then(results => {
+        const features = results.features;
+        let contentHTML = `<h3>People at ${streetAddress}</h3>`;
+
+        if (features.length > 0) {
+            features.forEach((feature) => {
+                const attr = feature.attributes;
+                const targetId = `personDetail_${attr.OBJECTID}`;
+                
+                // Extract coordinates for the "Zoom" link
+                const lon = feature.geometry.longitude || feature.geometry.x;
+                const lat = feature.geometry.latitude || feature.geometry.y;
+
+                // Format Name
+                const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
+                const concatName = nameParts.filter(p => p && String(p).trim() !== '').join(" ") || attr.USER_Name_as_given || "Unknown";
+                const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
+    			const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
+    			const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
+    			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
+    			const boardRent = createStringIfNotNull(`<b>Boards or Rents:</b> `, attr.USER_r_bds, `<br>`);
+    			const POC = createStringIfNotNull(`<b>Person of Color:</b> `, attr.USER_POC, `<br>`);
+    			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
+
+                contentHTML += `
+                    <div class="personResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
+                        <a style="padding-left:0px;" class="dropdown-toggle btn d-flex justify-content-between align-items-center" 
+                           role="button" data-toggle="collapse" href="#${targetId}">
+                            <h4>${concatName}</h4>
+                        </a>
+                        <div class="collapse" id="${targetId}">
+                            ${occupation || ''}
+            				${businessName || ''}
+            				${office || ''}
+            				${residence || ''}
+            				${description || ''}
+            				${boardRent || ''}
+            				${POC || ''}
+                            <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>
+                        </div>
+                    </div>`;
+            });
+        } else {
+            contentHTML += "<p>No people records found for this address.</p>";
+        }
+
+        document.getElementById('personInfo').innerHTML = contentHTML;
+        // Update the tab counter
+        document.getElementById("peopleCounter").innerHTML = `People (${features.length})`;
+    });
+}
 // Function to highlight a visible point by coordinates (used by Zoom link)
 window.highlightPointByCoords = function(long, lat) {
     // 1. Clear any existing highlight
@@ -426,6 +491,7 @@ reactiveUtils.watch(
 	peopleLayer = new FeatureLayer({
     url: "https://lyre.cofc.edu/server/rest/services/shoc/DBO_people_cd1888/FeatureServer/64",
     outFields: ["*"],
+    visible: false,
     renderer: {
         type: "simple",
         visualVariables: [sizeVV],
@@ -544,6 +610,7 @@ viewElement.view.on("click", (event) => {
             const graphic = indexResult.graphic;
             const prefix = graphic.attributes;
             const objectId = prefix.OBJECTID;
+            const streetAddress = prefix.orig_no_street_address;
             
             // Clear existing highlights
             if (currentHighlight) {
@@ -555,6 +622,13 @@ viewElement.view.on("click", (event) => {
             if (pointsLayer) {
         		pointsLayer.definitionExpression = `${timelineFilter} AND OBJECTID <> ${objectId}`;
     		}
+    		
+    		if (peopleLayer) {
+        		const sanitizedAddress = streetAddress.replace(/'/g, "''");
+        		peopleLayer.definitionExpression = `USER_Street_number_name = '${sanitizedAddress}'`;
+    		}
+    		
+    		queryAndDisplayPeople(streetAddress);
 
             // Save state and fetch detailed records
             lastSelectedOrigFid = prefix.ORIG_FID;
@@ -571,7 +645,13 @@ viewElement.view.on("click", (event) => {
         else if (!detailedResult && !indexResult) {
             if (pointsLayer) pointsLayer.definitionExpression = timelineFilter;
     		if (placesLayer) placesLayer.definitionExpression = "1=0";
+    		if (peopleLayer) {
+        peopleLayer.visible = false;
+        peopleLayer.definitionExpression = "1=0";
+    }
     		pointsInfo.innerHTML = "No points selected";
+    		document.getElementById('personInfo').innerHTML = "No person point selected";
+    document.getElementById("peopleCounter").innerHTML = `People`;
         }
     });
 });
