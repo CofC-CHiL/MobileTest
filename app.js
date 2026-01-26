@@ -1,7 +1,6 @@
 // ====================================================================
 // 1. VARIABLE DECLARATIONS (DOM Elements and ArcGIS Imports)
 // ====================================================================
-
 // DOM Element References (Sliders & Map Interaction)
 const opacityInput = document.getElementById('sliderDiv'); // Opacity range input for historic map
 const rangeOutput = document.getElementById('rangeValue'); // Opacity value display
