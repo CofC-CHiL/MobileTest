@@ -1,6 +1,7 @@
 // ====================================================================
 // 1. VARIABLE DECLARATIONS (DOM Elements and ArcGIS Imports)
 // ====================================================================
+
 // DOM Element References (Sliders & Map Interaction)
 const opacityInput = document.getElementById('sliderDiv'); // Opacity range input for historic map
 const rangeOutput = document.getElementById('rangeValue'); // Opacity value display
@@ -1319,4 +1320,93 @@ function openPeoplePanel(feature) {
             currentHighlight = lv.highlight(feature);
         }).catch(err => console.warn("Highlight failed:", err));
     }
+}
+window.startTour = function() {
+    introJs.tour().setOptions({
+        steps: [
+        	{
+                element: document.querySelector('#slider-container'),
+                intro: "Use this slider to adjust the visibility of the selected historic map. Lowering the opacity lets you see the present-day base map underneath more visible."
+            },
+            {
+                element: document.querySelector('#navbarDropdownMenuLink'),
+                intro: "This dropdown provides links to learn more about the Spatial History of Charleston project."
+            },
+            {
+                element: document.querySelector('#searchGroup'),
+                intro: "Search for maps, places, and people."
+            },
+            {
+                element: document.querySelector('#date-slider-container'),
+                intro: "Filter the date range of search results, maps, and points."
+            },
+            {
+                element: document.querySelector('#pointToggle'),
+                intro: "Toggle the visibility of the map points on and off."
+            },
+        	{
+                element: document.querySelector('.arcgis-zoom'),
+                intro: "Zoom in or out of the map to change the maps available."
+            },
+            {
+                element: document.querySelector('.esri-home'),
+                intro: "Return to the original map extent."
+            },
+            {
+            	element: document.querySelector('.esri-locate'),
+                intro: "Zoom to your present location using your device's internal GPS."
+            },
+            {
+                element: document.querySelector('.esri-compass'),
+                intro: "Return the map to its original north-south orientation. On a desktop you can right-click and drag the map to rotate, and on touch screens you can use two fingers."
+            },
+            {
+                element: document.querySelector('.esri-basemap-toggle'),
+                intro: "Switch the modern base map from a street map to a satellite view and back again."
+            },
+            {
+                element: document.querySelector('.expandButton'),
+                intro: "This information panel shows you information on search results as well as selected points and maps."
+            },
+            {
+                element: document.querySelector('#infoTabsMenu'),
+                intro: "Use these tabs to select the kind of information you want to see results for."
+            },
+            {
+                element: document.querySelector('#mapSearchResults'),
+                intro: "This area will show the results that fit the search criteria of the search bar and date range. In the map panel, the results are also dependent on the zoom extent of the base map."
+            },
+            {
+                element: document.querySelector('#mapsInfo'),
+                intro: "Selecting a map or a point from the search results or the map itself will populate additional information on the source here."
+            },
+            {
+                element: document.querySelector('#tourButton'),
+                intro: "View this tour again at any time if you need help."
+            }
+        ],
+    })
+    .onBeforeChange(function(targetElement) {
+		console.log("About to change to a new step. The target element is:", targetElement.id);
+		if (targetElement.id === "infoTabsMenu") {
+			featureNode.style.display = "block";
+        if (window.innerWidth < 850) {
+            featureNode.style.width= "80vw";
+            featureNode.style.zindex="1001";
+            } 
+        else {
+			featureNode.style.width= "25vw";
+			viewElement.style.width="75vw";
+			}
+        	collapseIcon.style.display = "block";
+        	expandIcon.style.display = "none";
+		}
+		if (targetElement.id === "tourButton") {
+		featureNode.style.display = "none";
+            viewElement.style.width = "100vw";
+            collapseIcon.style.display = "none";
+            expandIcon.style.display = "block";
+            }
+    })
+    .start();
 }
