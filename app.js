@@ -168,6 +168,8 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                     const concatAddress = [attributes.orig_address_no, attributes.orig_address_street]
     				.filter(part => part) 
    					.join(" ");
+   					// Create an escaped version of the address for the function call
+					const escapedAddrForPeople = concatAddress.replace(/'/g, "\\'");
    					const currConcatAddress = [attributes.curr_address_no, attributes.curr_address_street]
     				.filter(part => part) 
    					.join(" ");
@@ -212,7 +214,8 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                     		${max_stories ?? ``}
                     		${currAdd ?? ``}
                     		<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); highlightPointByCoords(${long}, ${lat}); return false;">Zoom to Point</a><br>
-                    		<a href="#" value="${mapURL}"">View Source Map</a>
+                    		<a href="#" value="${mapURL}"">View Source Map</a><br>
+                    		<a href="javascript:void(0)" onclick="linkToPeopleFromAddress('${escapedAddrForPeople}')">View People at this Address</a><br>
                     		${endOfCollapse}
                         </div>
                     `;
@@ -253,9 +256,20 @@ function queryAndDisplayPeople(streetAddress) {
                 const attr = feature.attributes;
                 const targetId = `personDetail_${attr.OBJECTID}`;
                 
+                // Address for Place linking
+                const personStreetAddress = attr.USER_Street_number_name;
+                const escapedAddrForLink = personStreetAddress ? personStreetAddress.replace(/'/g, "\\'") : null;
+                
                 // Extract coordinates for the "Zoom" link
-                const lon = feature.geometry.longitude || feature.geometry.x;
-                const lat = feature.geometry.latitude || feature.geometry.y;
+                const lon = feature.geometry ? (feature.geometry.longitude || feature.geometry.x) : null;
+            	const lat = feature.geometry ? (feature.geometry.latitude || feature.geometry.y) : null;
+            	
+            	let boardOwnsText = '';
+            	if (attr.USER_r_bds === "r") {
+                	boardOwnsText = "Owns";
+            	} else if (attr.USER_r_bds === "bds") {
+                	boardOwnsText = "Boards";
+            	}
 
                 // Format Name
                 const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
@@ -264,8 +278,8 @@ function queryAndDisplayPeople(streetAddress) {
     			const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
     			const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
     			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
-    			const boardRent = createStringIfNotNull(`<b>Boards or Rents:</b> `, attr.USER_r_bds, `<br>`);
-    			const POC = createStringIfNotNull(`<b>Person of Color:</b> `, attr.USER_POC, `<br>`);
+    			const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
+    			const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
     			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
 
                 contentHTML += `
@@ -282,7 +296,8 @@ function queryAndDisplayPeople(streetAddress) {
             				${description || ''}
             				${boardRent || ''}
             				${POC || ''}
-                            <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>
+                            ${lon && lat ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` : '<i style="color:gray;">Map location unavailable</i>'}
+                            ${escapedAddrForLink ? `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>` : ''}
                         </div>
                     </div>`;
             });
@@ -1264,14 +1279,14 @@ function openPeoplePanel(feature) {
     expandIcon.style.display = "none";
     $('#peopleCounter').tab('show');
 
-    // 2. Extract Geometry safely
-    let lon, lat;
+    // 2. Extract Geometry safely (No early return!)
+    let lon = null, lat = null;
     if (feature.geometry) {
         lon = feature.geometry.longitude || feature.geometry.x;
         lat = feature.geometry.latitude || feature.geometry.y;
     } else {
-        console.error("No geometry found for this feature.");
-        return;
+        // We log a warning instead of returning so the rest of the function runs
+        console.warn("No geometry found for this record. Populating text fields only.");
     }
 
     // 3. Prepare the Content Strings
@@ -1279,13 +1294,20 @@ function openPeoplePanel(feature) {
     const concatName = nameParts.filter(part => part && String(part).trim() !== '').join(" ") 
                        || attr.USER_Name_as_given 
                        || "Unknown Name";
+    const streetAddress = attr.USER_Street_number_name;
+    let boardOwnsText = '';
+		if (attr.USER_r_bds === "r") {
+    		boardOwnsText = "Owns";
+		} else if (attr.USER_r_bds === "bds") {
+    		boardOwnsText = "Boards";
+		}
 
     const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
     const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
     const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
     const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
-    const boardRent = createStringIfNotNull(`<b>Boards or Rents:</b> `, attr.USER_r_bds, `<br>`);
-    const POC = createStringIfNotNull(`<b>Person of Color:</b> `, attr.USER_POC, `<br>`);
+    const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
+    const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
     const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
 
     // 4. Build the HTML
@@ -1300,27 +1322,94 @@ function openPeoplePanel(feature) {
             ${residence || ''}
             ${description || ''}
             ${boardRent || ''}
-            ${POC || ''}
+            ${POC}
             <hr>
-            <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>
-        </div>
     `;
 
-    // 5. Update DOM
+    // 5. Contextual Map Link: Only add if coordinates exist
+    if (lon && lat) {
+    	const escapedAddress = streetAddress.replace(/'/g, "\\'");
+        contentHTML += `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a><br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>`;
+    } else {
+        contentHTML += `<p style="color: #666; font-style: italic;">Zoom to point currently unavailable.</p>`;
+    }
+	
+    contentHTML += `</div>`;
+
+    // 6. Update DOM
     document.getElementById('personInfo').innerHTML = contentHTML;
 
-    // 6. Map Actions (Zoom and Highlight)
-    viewElement.view.goTo({ target: [lon, lat], zoom: 18 });
+    // 7. Map Actions: Only run if we actually have spatial data
+    if (currentHighlight) {
+        currentHighlight.remove();
+        currentHighlight = null;
+    }
 
-    if (currentHighlight) currentHighlight.remove();
-    
-    if (peopleLayer) {
+    if (lon && lat && peopleLayer) {
+        viewElement.view.goTo({ target: [lon, lat], zoom: 18 });
         peopleLayer.visible = true; 
         viewElement.view.whenLayerView(peopleLayer).then(lv => {
             currentHighlight = lv.highlight(feature);
         }).catch(err => console.warn("Highlight failed:", err));
     }
 }
+window.linkToPlaceFromAddress = function(address) {
+    if (!address) return;
+
+    // 1. Query the index layer to find the record for this address
+    const query = pointsLayer.createQuery();
+
+    query.where = "orig_no_street_address = '" + address.replace(/'/g, "''") + "'";
+    
+    query.outFields = ["ORIG_FID", "orig_no_street_address", "OBJECTID"];
+    query.returnGeometry = true;
+
+    pointsLayer.queryFeatures(query).then(results => {
+        if (results.features.length > 0) {
+            const placeFeature = results.features[0];
+            const fid = placeFeature.attributes.ORIG_FID;
+            const addr = placeFeature.attributes.orig_no_street_address;
+
+            // 2. Switch to the Places tab
+            $('#pointsCounter').tab('show');
+
+            // 3. Populate the Places information using your existing function
+            queryAndDisplayPlaces(fid, addr);
+            
+            // 4. Highlight on map
+            viewElement.view.goTo(placeFeature.geometry);
+        } else {
+            console.warn("No specific architectural record found for: " + address);
+        }
+    }).catch(err => console.error("Error linking to place:", err));
+};
+
+window.linkToPeopleFromAddress = function(address) {
+    if (!address) return;
+
+    // 1. Switch to the People tab
+    $('#peopleCounter').tab('show');
+
+    // 2. Ensure the sidebar is visible/expanded
+    featureNode.style.display = "block";
+    if (window.innerWidth < 850) {
+        featureNode.style.width = "80vw";
+    } else {
+        featureNode.style.width = "25vw";
+        viewElement.style.width = "75vw";
+    }
+    collapseIcon.style.display = "block";
+    expandIcon.style.display = "none";
+
+    // 3. Trigger the existing search logic for people
+    // This updates the list in the People tab
+    queryPeople(address);
+
+    // 4. Populate the specific info box for this address
+    // This fills the "personInfo" div underneath the list
+    queryAndDisplayPeople(address);
+};
+
 window.startTour = function() {
     introJs.tour().setOptions({
         steps: [
