@@ -6,6 +6,8 @@
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-Fy6S3B9q64WdZWQUiU+q4/2Lc9npb8tCaSX9FK7E8HnRr0Jz8D6OP9dO5Vg3Q9ct" crossorigin="anonymous"></script>
+		<link href="https://unpkg.com/intro.js/introjs.css" rel="stylesheet">
+		<script src="https://unpkg.com/intro.js/intro.js"></script>
 		<link rel="stylesheet" href="style.css">
 		<script>
 	var esriConfig = {
@@ -34,7 +36,7 @@
   </button>
   </div>
 <div class="collapse navbar-collapse" id="navbarTogglerDemo01">
-    <div id="slider-container" class="slider w-100 col h-100 justify-content-center align-content-center">
+    <div data-title="Map Opacity" data-intro="Change the opacity of the historic map overlay to change how much you can see the base map." id="slider-container" class="slider w-100 col h-100 justify-content-center align-content-center">
         <label class="row w-100 d-inline-flex justify-content-center align-content-center"><span>Historic Map Opacity: <span id="rangeValue" class="slider-value" style="display: inline;">100%</span></span>
 				<div class="slider-wrapper w-100 px-4">
 					<input type="range" min="0" max="100" value="100" class="rangeSlider w-100" id="sliderDiv">
@@ -43,13 +45,7 @@
     </div>
 </div>
 
-<div class="px-2">
-            <calcite-label layout="inline" class="text-white">
-					<calcite-switch value="True" checked></calcite-switch>
-					<calcite-icon icon="pin-tear" scale="m" style="color: var(--secondary-color);"/>
-				</calcite-label>
-        </div>
-    <div class="dropdown menu-end ms-lg-auto">
+    <div data-title="Menu" data-intro="Find links to learn more about the SHOC project." class="dropdown menu-end ms-lg-auto">
         <button type="button" id="navbarDropdownMenuLink" class="button2 collapser h-100 btn nav-item" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
             <img src="https://upload.wikimedia.org/wikipedia/commons/5/59/Hamburger_icon_white.svg" alt="hamburger menu">
         </button>
@@ -65,14 +61,14 @@
 
 <nav class="navbar-expand-md d-flex navbar justify-content-between" id="navRow2">
 	<div class="collapse navbar-collapse" id="navbarTogglerDemo02">
-    <div class="form-inline input-group col-md-6 col-lg-4 col-xl-4 col menu-end nav-item">
+    <div id="searchGroup" data-title="Search" data-intro="Search for maps and points." class="form-inline input-group col-md-6 col-lg-4 col-xl-4 col menu-end nav-item">
         <input id="searchBar" type="search" class="form-control" placeholder="Search maps and points" aria-label="keyword" aria-describedby="basic-addon2">
         <div class="input-group-append">
             <button id="searchButton" class="button2 h-100 btn" type="button">Search</button>
         </div>
     </div>
 
-    <div id="date-slider-container" class="nav-item slider w-100 col h-100 py-1">
+    <div data-title="Date Range" data-intro="Filter the date range for points and maps." id="date-slider-container" class="nav-item slider w-100 col h-100 py-1">
         <label class="row w-100 d-inline-flex justify-content-center align-content-center">Date Range</label>
         <div class="row w-100 d-inline-flex align-items-center">
             <span id="dateMinValue" class="slider-value-left">1670</span>
@@ -83,7 +79,14 @@
             <span id="dateMaxValue" class="slider-value-right">1950</span>
         </div>
     </div>
-
+    
+<div class="px-2">
+            <calcite-label id="pointToggle" data-title="Toggle Points" data-intro="Turn the visibility of the map points on and off." layout="inline" class="text-white">
+					<calcite-switch value="True" checked></calcite-switch>
+					<calcite-icon icon="pin-tear" scale="m" style="color: var(--secondary-color);"/>
+				</calcite-label>
+        </div>
+        
     <div class="button2 d-flex nav-item align-items-center h-100 menu-end">
         
         <div id="pointsFilter" role="group" aria-label="People and Places Menu" class="button1 btn-group btn-group-toggle h-100 menu-end">
@@ -112,7 +115,7 @@
 
 <div class="map-area">
     <div id="feature-node">
-        <ul class="nav nav-tabs nav-fill" role="tablist">
+        <ul id="infoTabsMenu" class="nav nav-tabs nav-fill" role="tablist">
             <li class="nav-item">
                 <a class="nav-link active" id="mapsCounter" data-toggle="tab" href="#selectedDiv" role="tab" aria-controls="selectedDiv" aria-selected="true">Maps</a>
             </li>
@@ -139,7 +142,7 @@
             <div id="selectedDiv" class="tab-pane fade show active" role="tabpanel" aria-labelledby="mapsCounter">
                 <h2>Results</h2>
                 
-                <div class="resultBox">
+                <div id="mapSearchResults" class="resultBox">
                     <ul id="result-list" class="list-group">
                         <li id="defaultOption" value="1=0" class="list-group-item"><h3>Hide Map</h3></li>
                     </ul>
@@ -161,7 +164,7 @@
         </div>
     </div>
 
-    <div class="expandButton">
+    <div id="infoPanelButton" class="expandButton">
         <button type="button" id="expandCollapse" class="button2 collapser btn nav-item  d-flex align-items-center" data-expanded="false">
             <span class="ml-2"><calcite-icon icon="map-pin" scale="l" /></span>
             <svg id="expand-icon" style="display: block" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-list" viewBox="0 0 16 16">
@@ -177,20 +180,24 @@
     
     <!--<arcgis-map basemap="streets" center= "-79.939, 32.785" zoom= "13">-->
     <arcgis-map basemap="streets" center= "-79.939, 32.785" zoom= "13">
+    <arcgis-placement position="top-right">
+            <button id="tourButton" type="button" class="btn btn-primary" onclick="startTour()">Take a Tour</button>
+        </arcgis-placement>
         <arcgis-zoom position="top-right"></arcgis-zoom>
-        <arcgis-home position="top-right"></arcgis-home>
-        <arcgis-locate position="top-right" scale="500"></arcgis-locate>
+        <arcgis-home position="top-right" data-title="Home" data-intro="Return to the original map extent."></arcgis-home>
+        <arcgis-locate  position="top-right" scale="500"></arcgis-locate>
         <arcgis-scale-bar
             position="bottom-left"
             bar-style="ruler"
             unit="imperial"
         ></arcgis-scale-bar>
         <arcgis-compass position="top-right"></arcgis-compass>
-        <arcgis-basemap-toggle position="bottom-right"></arcgis-basemap-toggle>
-
+        <arcgis-basemap-toggle  position="bottom-right"></arcgis-basemap-toggle>
         <arcgis-placement position="bottom-left">
             <div class="map-floater">Right-click and drag to rotate map.</div>
         </arcgis-placement>
+		
+        
     		<div id="loader-container">
         		<calcite-loader id="main-loader" label="Loading..." text="Loading..." type="indeterminate" scale="m"></calcite-loader>
     		</div>
