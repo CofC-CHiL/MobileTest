@@ -700,12 +700,12 @@ if (selectedValue === "places") {
     } else if (selectedValue === "people") {
         pointsLayer.visible = false;
         if (peopleLayer) {
-            peopleLayer.visible = true;
+            peopleLayer.visible = false;
             queryPeople(searchBar.value.trim()); // Populate list when switching
         }
     } else if (selectedValue === "both") {
         pointsLayer.visible = true;
-        if (peopleLayer) peopleLayer.visible = true;
+        if (peopleLayer) peopleLayer.visible = false;
     }
 });
 
@@ -952,9 +952,10 @@ function queryPeople(searchText) {
         peopleCounter.innerHTML = `People`;
         return; 
     }
-
+	
     // Build the query
     const searchFilter = `(
+    UPPER(USER_Given_Name || ' ' || USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
     UPPER(USER_Name_as_given) LIKE '%${searchText.toUpperCase()}%' OR 
     UPPER(USER_Occupation_Title) LIKE '%${searchText.toUpperCase()}%' OR 
     UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%' OR
@@ -1359,7 +1360,7 @@ function openPeoplePanel(feature) {
 
     if (lon && lat && peopleLayer) {
         viewElement.view.goTo({ target: [lon, lat], zoom: 18 });
-        peopleLayer.visible = true; 
+        peopleLayer.visible = false; 
         viewElement.view.whenLayerView(peopleLayer).then(lv => {
             currentHighlight = lv.highlight(feature);
         }).catch(err => console.warn("Highlight failed:", err));
