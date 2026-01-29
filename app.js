@@ -153,12 +153,12 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
 
     document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading records...</p>`;
 
-    placesLayer.queryFeatures(query).then(results => {
+    placesLayer.queryFeatures(query).then(async (results) => {
         const features = results.features;
         let contentHTML = `<h3>Structures at ${originalAddress}</h3>`;
 
         if (features.length > 0) {
-            features.forEach((feature, index) => {
+            for (const feature of features) {
                 const attributes = feature.attributes;
                 const y = feature.geometry.y;
                 	const x = feature.geometry.x;
@@ -175,6 +175,12 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
    					.join(" ");
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
                		const targetId = `placeDetail_${attributes.place_ID}_${attributes.OBJECTID}`;
+               		
+               		const peopleQuery = peopleLayer.createQuery();
+                peopleQuery.where = "USER_Street_number_name = '" + concatAddress.replace(/'/g, "''") + "'";
+                // Check if any people exist at this specific address
+                const checkCount = await peopleLayer.queryFeatureCount(peopleQuery);
+                
                		const contentTitle = `
     				<a style="padding-left:0px;" onclick="highlightPointByCoords(${long}, ${lat})" class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
         			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
@@ -199,6 +205,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         			const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
         			const currMuni = createStringIfNotNull(`<b>Current Municipality:</b> `,attributes.curr_city,`<br>`);
         			const mapURL = attributes.map_url;
+        			const peopleLink = checkCount > 0 ? `<br><a href="javascript:void(0)" onclick="linkToPeopleFromAddress('${escapedAddrForPeople}')">View People at this Address</a>` : "";
 
                     contentHTML += `
                         <div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
@@ -214,12 +221,12 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                     		${max_stories ?? ``}
                     		${currAdd ?? ``}
                     		<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); highlightPointByCoords(${long}, ${lat}); return false;">Zoom to Point</a><br>
-                    		<a href="#" value="${mapURL}"">View Source Map</a><br>
-                    		<a href="javascript:void(0)" onclick="linkToPeopleFromAddress('${escapedAddrForPeople}')">View People at this Address</a><br>
+                    		<a href="#" value="${mapURL}"">View Source Map</a>
+							${peopleLink ?? ``}
                     		${endOfCollapse}
                         </div>
                     `;
-                });
+                };
             } else {
                 contentHTML += "<p>No matching records found.</p>";
             }
@@ -232,7 +239,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
             document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>An error occurred while querying related places.</p>`;
         });
 }
-
+let peopleCount = 0;
 function queryAndDisplayPeople(streetAddress) {
     if (!streetAddress) return;
 
@@ -252,6 +259,7 @@ function queryAndDisplayPeople(streetAddress) {
         let contentHTML = `<h3>People at ${streetAddress}</h3>`;
 
         if (features.length > 0) {
+        	peopleCount= features.length;
             features.forEach((feature) => {
                 const attr = feature.attributes;
                 const targetId = `personDetail_${attr.OBJECTID}`;
@@ -297,7 +305,7 @@ function queryAndDisplayPeople(streetAddress) {
             				${boardRent || ''}
             				${POC || ''}
                             ${lon && lat ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` : '<i style="color:gray;">Map location unavailable</i>'}
-                            ${escapedAddrForLink ? `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>` : ''}
+							${escapedAddrForLink ? `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>` : ''}
                         </div>
                     </div>`;
             });
@@ -932,6 +940,7 @@ function queryPoints(searchText) {
 }
 
 function queryPeople(searchText) {
+	peopleCount = 0;
     const peopleListElement = document.getElementById("people-list");
     const peopleCounter = document.getElementById("peopleCounter");
     
@@ -945,14 +954,15 @@ function queryPeople(searchText) {
     }
 
     // Build the query
-    const searchFilter = `(UPPER(USER_Name_as_given) LIKE '%${searchText.toUpperCase()}%' OR 
-                     UPPER(USER_Occupation_Title) LIKE '%${searchText.toUpperCase()}%' OR 
-                     UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%') OR
-                     UPPER(USER_Residence__r_) LIKE '%${searchText.toUpperCase()}%' OR 
-                     UPPER(USER_Given_Name) LIKE '%${searchText.toUpperCase()}%' OR
-                     UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
-                     UPPER(USER_Salutation) LIKE '%${searchText.toUpperCase()}%' 
-                     `;
+    const searchFilter = `(
+    UPPER(USER_Name_as_given) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_Occupation_Title) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%' OR
+    UPPER(USER_Residence__r_) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_Given_Name) LIKE '%${searchText.toUpperCase()}%' OR
+    UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
+    UPPER(USER_Salutation) LIKE '%${searchText.toUpperCase()}%'
+)`;
 
     const peopleQuery = {
         where: searchFilter,
@@ -964,6 +974,7 @@ function queryPeople(searchText) {
     peopleLayer.queryFeatures(peopleQuery).then((results) => {
         peopleListElement.innerHTML = "";
         const features = results.features;
+        peopleCount = features.length;
         peopleCounter.innerHTML = `People (${features.length})`;
 
         if (features.length === 0) {
@@ -1328,11 +1339,12 @@ function openPeoplePanel(feature) {
 
     // 5. Contextual Map Link: Only add if coordinates exist
     if (lon && lat) {
-    	const escapedAddress = streetAddress.replace(/'/g, "\\'");
-        contentHTML += `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a><br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>`;
-    } else {
-        contentHTML += `<p style="color: #666; font-style: italic;">Zoom to point currently unavailable.</p>`;
-    }
+    const escapedAddrForLink = streetAddress.replace(/'/g, "\\'");
+    contentHTML += `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>`;
+    contentHTML += `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>`;
+} else {
+    contentHTML += `<p style="color: #666; font-style: italic;">Zoom to point currently unavailable.</p>`;
+}
 	
     contentHTML += `</div>`;
 
