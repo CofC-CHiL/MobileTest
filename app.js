@@ -240,7 +240,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         });
 }
 let peopleCount = 0;
-function queryAndDisplayPeople(streetAddress) {
+async function queryAndDisplayPeople(streetAddress) {
     if (!streetAddress) return;
 
     // Sanitize address for SQL
@@ -251,11 +251,27 @@ function queryAndDisplayPeople(streetAddress) {
     query.where = where;
     query.outFields = ["*"];
     query.returnGeometry = true;
+    query.outSpatialReference = { wkid: 102100 };
 
     document.getElementById('personInfo').innerHTML = `<p>Loading people at ${streetAddress}...</p>`;
+    
+    let fallbackCoords = null;
+    try {
+        const addrQuery = pointsLayer.createQuery();
+        addrQuery.where = `orig_no_street_address = '${sanitizedAddress}'`;
+        addrQuery.outFields = ["ORIG_FID"];
+        addrQuery.returnGeometry = true;
+        const addrResults = await pointsLayer.queryFeatures(addrQuery);
+        if (addrResults.features.length > 0) {
+            const geom = addrResults.features[0].geometry;
+            const lngLat = webMercatorUtils.xyToLngLat(geom.x, geom.y);
+            fallbackCoords = { lon: lngLat[0], lat: lngLat[1] };
+        }
+    } catch (e) { console.warn("Fallback address lookup failed", e); }
 
     peopleLayer.queryFeatures(query).then(results => {
         const features = results.features;
+        document.getElementById("peopleCounter").innerHTML = `People (${features.length})`;
         let contentHTML = `<h3>People at ${streetAddress}</h3>`;
 
         if (features.length > 0) {
@@ -264,21 +280,28 @@ function queryAndDisplayPeople(streetAddress) {
                 const attr = feature.attributes;
                 const targetId = `personDetail_${attr.OBJECTID}`;
                 
-                // Address for Place linking
-                const personStreetAddress = attr.USER_Street_number_name;
-                const escapedAddrForLink = personStreetAddress ? personStreetAddress.replace(/'/g, "\\'") : null;
+                let lon = null, lat = null;
                 
-                // Extract coordinates for the "Zoom" link
-                const lon = feature.geometry ? (feature.geometry.longitude || feature.geometry.x) : null;
-            	const lat = feature.geometry ? (feature.geometry.latitude || feature.geometry.y) : null;
+                // Use person's geometry if it exists
+                if (feature.geometry) {
+                    const lngLat = webMercatorUtils.xyToLngLat(feature.geometry.x, feature.geometry.y);
+                    lon = lngLat[0];
+                    lat = lngLat[1];
+                } 
+                // Otherwise, use the building's geometry we found in Step 1
+                else if (fallbackCoords) {
+                    lon = fallbackCoords.lon;
+                    lat = fallbackCoords.lat;
+                }
             	
             	let boardOwnsText = '';
             	if (attr.USER_r_bds === "r") {
-                	boardOwnsText = "Owns";
+                	boardOwnsText = "owns";
             	} else if (attr.USER_r_bds === "bds") {
-                	boardOwnsText = "Boards";
+                	boardOwnsText = "boards";
             	}
-
+				
+				const escapedLinkAddr = streetAddress.replace(/'/g, "\\'");
                 // Format Name
                 const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
                 const concatName = nameParts.filter(p => p && String(p).trim() !== '').join(" ") || attr.USER_Name_as_given || "Unknown";
@@ -304,8 +327,10 @@ function queryAndDisplayPeople(streetAddress) {
             				${description || ''}
             				${boardRent || ''}
             				${POC || ''}
-                            ${lon && lat ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` : '<i style="color:gray;">Map location unavailable</i>'}
-							${escapedAddrForLink ? `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>` : ''}
+                            ${(lon !== null && lat !== null) 
+                                ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` 
+                                : '<i style="color:gray;">Map location unavailable</i>'}
+                            <br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedLinkAddr}')">View Place Info</a>
                         </div>
                     </div>`;
             });
@@ -1309,9 +1334,9 @@ function openPeoplePanel(feature) {
     const streetAddress = attr.USER_Street_number_name;
     let boardOwnsText = '';
 		if (attr.USER_r_bds === "r") {
-    		boardOwnsText = "Owns";
+    		boardOwnsText = "owns";
 		} else if (attr.USER_r_bds === "bds") {
-    		boardOwnsText = "Boards";
+    		boardOwnsText = "boards";
 		}
 
     const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
