@@ -69,27 +69,27 @@ function handlePointSelection(objectId) {
     // Query the pointsLayer (index layer) by OBJECTID
     pointsLayer.queryFeatures({
         where: `OBJECTID = ${objectId}`,
-        outFields: ["orig_no_street_address", "ORIG_FID", "OBJECTID"],
+        outFields: ["*"],
         returnGeometry: true
     }).then(results => {
         if (results.features.length > 0) {
-            const graphicToHighlight = results.features[0];
-            const attributes = graphicToHighlight.attributes;
-            const origFidValue = attributes.ORIG_FID;
-            const addressFromIndex = attributes.orig_no_street_address;
+        	const selectedFeature = results.features[0];
+            const attributes = selectedFeature.attributes;
+            const targetPlaceId = attributes.place_ID;
+        	const addressFromIndex = attributes.orig_no_street_address;
             
             //  Save state globally (used by updateSliders for refreshing details)
-            lastSelectedOrigFid = origFidValue;
+            lastSelectedOrigFid = targetPlaceId;
             lastSelectedAddress = addressFromIndex;
 
             // Center map and highlight point
-            viewElement.view.goTo(graphicToHighlight.geometry);
+            viewElement.view.goTo(selectedFeature.geometry);
             //viewElement.view.whenLayerView(pointsLayer).then(layerView => {
                 //currentHighlight = layerView.highlight(graphicToHighlight); 
             //});
 
             //  Query the detailed placesLayer and update the sidebar
-            queryAndDisplayPlaces(origFidValue, addressFromIndex);
+            queryAndDisplayPlaces(targetPlaceId, addressFromIndex);
 
             //  Update UI state (show sidebar/switch tab)
             featureNode.style.display = "block";
@@ -154,6 +154,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
     document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading records...</p>`;
 
     placesLayer.queryFeatures(query).then(async (results) => {
+    	
         const features = results.features;
         let contentHTML = `<h3>Structures at ${originalAddress}</h3>`;
 
@@ -181,12 +182,18 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
                 // Check if any people exist at this specific address
                 const checkCount = await peopleLayer.queryFeatureCount(peopleQuery);
                 
-               		const contentTitle = `
-    				<a style="padding-left:0px;" onclick="highlightPointByCoords(${long}, ${lat})" class="dropdown-toggle btn d-flex justify-content-between align-items-center" role="button" data-toggle="collapse" href="#${targetId}" aria-expanded="false" aria-controls="${targetId}">
-        			<h4>${attributes.function_prime} (${attributes.source_year})</h4>
-    				</a>
-					`;
-					const startOfCollapse = `<div class="collapse" id="${targetId}">`;
+const contentTitle = `
+    <a style="padding-left:0px;" 
+       onclick="highlightPointByCoords(${long}, ${lat})" 
+       class="dropdown-toggle btn d-flex justify-content-between align-items-center" 
+       role="button" 
+       data-toggle="collapse" 
+       data-target="#${targetId}" 
+       aria-expanded="false">
+        <h4>${attributes.function_prime} (${attributes.source_year})</h4>
+    </a>
+`;
+const startOfCollapse = `<div class="collapse" id="${targetId}" data-parent="#pointsInfo">`;
 					const endOfCollapse = `</div>`;
         			const sourceData = [
     					attributes.source_year ?? '', 
@@ -245,7 +252,7 @@ async function queryAndDisplayPeople(streetAddress) {
 
     // Sanitize address for SQL
     const sanitizedAddress = streetAddress.replace(/'/g, "''");
-    const where = `USER_Street_number_name = '${sanitizedAddress}'`;
+    const where = `USER_street_number_name = '${sanitizedAddress}'`;
 
     const query = peopleLayer.createQuery();
     query.where = where;
@@ -259,7 +266,7 @@ async function queryAndDisplayPeople(streetAddress) {
     try {
         const addrQuery = pointsLayer.createQuery();
         addrQuery.where = `orig_no_street_address = '${sanitizedAddress}'`;
-        addrQuery.outFields = ["ORIG_FID"];
+        addrQuery.outFields = ["*"];
         addrQuery.returnGeometry = true;
         const addrResults = await pointsLayer.queryFeatures(addrQuery);
         if (addrResults.features.length > 0) {
@@ -295,9 +302,9 @@ async function queryAndDisplayPeople(streetAddress) {
                 }
             	
             	let boardOwnsText = '';
-            	if (attr.USER_r_bds === "r") {
+            	if (attr.resident_boards === "r") {
                 	boardOwnsText = "owns";
-            	} else if (attr.USER_r_bds === "bds") {
+            	} else if (attr.resident_boards === "bds") {
                 	boardOwnsText = "boards";
             	}
 				
@@ -305,34 +312,46 @@ async function queryAndDisplayPeople(streetAddress) {
                 // Format Name
                 const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
                 const concatName = nameParts.filter(p => p && String(p).trim() !== '').join(" ") || attr.USER_Name_as_given || "Unknown";
-                const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
-    			const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
-    			const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
+                const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_cccupation_title, `<br>`);
+                const business = createStringIfNotNull(`<b>Business:</b> `, attr.USER_business_name_employer, `<br>`);
+    			const office = createStringIfNotNull(`<b>Business Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
+    			const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence_cityDirect, `<br>`);
     			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
     			const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
     			const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
     			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
 
+                const contentTitle = `
+    <a style="padding-left:0px;" 
+       onclick="highlightPointByCoords(${lon}, ${lat})" 
+       class="dropdown-toggle btn d-flex justify-content-between align-items-center" 
+       role="button" 
+       data-toggle="collapse" 
+       data-target="#${targetId}" 
+       aria-expanded="false">
+        <h4>${concatName}</h4>
+    </a>
+`;
+const startOfCollapse = `<div class="collapse" id="${targetId}" data-parent="#pointsInfo">`;
+					const endOfCollapse = `</div>`;
                 contentHTML += `
-                    <div class="personResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
-                        <a style="padding-left:0px;" class="dropdown-toggle btn d-flex justify-content-between align-items-center" 
-                           role="button" data-toggle="collapse" href="#${targetId}">
-                            <h4>${concatName}</h4>
-                        </a>
-                        <div class="collapse" id="${targetId}">
-                            ${occupation || ''}
-            				${businessName || ''}
-            				${office || ''}
-            				${residence || ''}
-            				${description || ''}
-            				${boardRent || ''}
-            				${POC || ''}
-                            ${(lon !== null && lat !== null) 
-                                ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` 
-                                : '<i style="color:gray;">Map location unavailable</i>'}
-                            <br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedLinkAddr}')">View Place Info</a>
-                        </div>
-                    </div>`;
+				${contentTitle}
+        		${startOfCollapse}
+                ${occupation || ''}
+                ${businessName || ''}
+                ${office || ''}
+                ${residence || ''}
+                ${description || ''}
+                ${boardRent || ''}
+                ${POC || ''}
+                ${(lon !== null && lat !== null) 
+                    ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` 
+                    : '<i style="color:gray;">Map location unavailable</i>'}
+                <br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedLinkAddr}')">View Place Info</a>
+                ${endOfCollapse}
+            </div>
+        </div>
+    </div>`;
             });
         } else {
             contentHTML += "<p>No people records found for this address.</p>";
@@ -509,7 +528,8 @@ reactiveUtils.watch(
     // Initialize the FeatureLayer for the places_index points
     pointsLayer = new FeatureLayer({
     	url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
-    	outFields: ["orig_no_street_address", "ORIG_FID"],
+    	outFields: ["*"],
+    	gdbVersion: null,
         //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
         //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points,
@@ -656,9 +676,11 @@ viewElement.view.on("click", (event) => {
         // 2. Logic for clicking a Red Index Point (Initial Selection)
         if (indexResult) {
             const graphic = indexResult.graphic;
-            const prefix = graphic.attributes;
-            const objectId = prefix.OBJECTID;
-            const streetAddress = prefix.orig_no_street_address;
+    		const prefix = graphic.attributes;
+    		const objectId = prefix.OBJECTID;
+    		const streetAddress = prefix.orig_no_street_address;
+            
+            const targetPlaceId = prefix.place_ID;
             
             // Clear existing highlights
             if (currentHighlight) {
@@ -679,9 +701,9 @@ viewElement.view.on("click", (event) => {
     		queryAndDisplayPeople(streetAddress);
 
             // Save state and fetch detailed records
-            lastSelectedOrigFid = prefix.ORIG_FID;
-            lastSelectedAddress = prefix.orig_no_street_address;
-            queryAndDisplayPlaces(prefix.ORIG_FID, prefix.orig_no_street_address);
+            lastSelectedOrigFid = targetPlaceId;
+    		lastSelectedAddress = streetAddress;
+    		queryAndDisplayPlaces(targetPlaceId, streetAddress);
 
             // Open and switch sidebar tabs
             featureNode.style.display = "block";
@@ -910,12 +932,12 @@ function queryPoints(searchText) {
             const placeIds = placesResults.features.map(f => f.attributes.place_ID).filter(id => id);
             
             // Build the filter for the pointsLayer (index layer)
-            const uniquePlaceIdsFilter = `ORIG_FID IN (${placeIds.join(",")})`;
+            const uniquePlaceIdsFilter = `place_ID IN ('${placeIds.join("','")}')`;
 
             // 4. Query the pointsLayer (index layer) to get the point addresses and OBJECTIDs
             return pointsLayer.queryFeatures({
                 where: uniquePlaceIdsFilter,
-                outFields: ["orig_no_street_address", "OBJECTID", "ORIG_FID"],
+                outFields: ["*"],
                 returnGeometry: false
             });
         })
@@ -982,9 +1004,11 @@ function queryPeople(searchText) {
     const searchFilter = `(
     UPPER(USER_Given_Name || ' ' || USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
     UPPER(USER_Name_as_given) LIKE '%${searchText.toUpperCase()}%' OR 
-    UPPER(USER_Occupation_Title) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_Occupation_title__business_CityDir) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_cccupation_title) LIKE '%${searchText.toUpperCase()}%' OR
+    UPPER(USER_business_name_employer) LIKE '%${searchText.toUpperCase()}%' OR
     UPPER(USER_Office_Business_Address) LIKE '%${searchText.toUpperCase()}%' OR
-    UPPER(USER_Residence__r_) LIKE '%${searchText.toUpperCase()}%' OR 
+    UPPER(USER_Street) LIKE '%${searchText.toUpperCase()}%' OR 
     UPPER(USER_Given_Name) LIKE '%${searchText.toUpperCase()}%' OR
     UPPER(USER_Surname) LIKE '%${searchText.toUpperCase()}%' OR
     UPPER(USER_Salutation) LIKE '%${searchText.toUpperCase()}%'
@@ -1011,6 +1035,7 @@ function queryPeople(searchText) {
         features.forEach((feature) => {
             const attr = feature.attributes;
             const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
+            const uniqueId = `person_list_item_${attr.OBJECTID}`;
     		const concatName = nameParts.filter(part => part && String(part).trim() !== '').join(" ") 
                        || attr.USER_Name_as_given 
                        || "Unknown Name";
@@ -1186,7 +1211,7 @@ function displayResults(results) {
     // Re-add the points layer on top of the tile layer (at index 1)
     const newPointsLayer = new FeatureLayer({
         url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
-    	outFields: ["orig_no_street_address", "ORIG_FID"],
+    	outFields: ["*"],
         //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
         //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points, // Reusing the defined renderer
@@ -1273,7 +1298,7 @@ function updateSliders() {
                 const validIds = results.features.map(f => f.attributes.place_ID).filter(id => id);
                 
                 if (validIds.length > 0) {
-                    timelineFilter = `ORIG_FID IN (${validIds.join(",")})`;
+                    timelineFilter = `place_ID IN ('${validIds.join("','")}')`;
                 } else {
                     timelineFilter = "1=0";
                 }
@@ -1316,7 +1341,7 @@ function openPeoplePanel(feature) {
     expandIcon.style.display = "none";
     $('#peopleCounter').tab('show');
 
-    // 2. Extract Geometry safely (No early return!)
+    // 2. Extract Geometry safely
     let lon = null, lat = null;
     if (feature.geometry) {
         lon = feature.geometry.longitude || feature.geometry.x;
@@ -1327,34 +1352,33 @@ function openPeoplePanel(feature) {
     }
 
     // 3. Prepare the Content Strings
-    const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
-    const concatName = nameParts.filter(part => part && String(part).trim() !== '').join(" ") 
-                       || attr.USER_Name_as_given 
-                       || "Unknown Name";
-    const streetAddress = attr.USER_Street_number_name;
+    const streetAddress = attr.USER_street_number_name;
     let boardOwnsText = '';
-		if (attr.USER_r_bds === "r") {
-    		boardOwnsText = "owns";
-		} else if (attr.USER_r_bds === "bds") {
-    		boardOwnsText = "boards";
-		}
+            	if (attr.resident_boards === "r") {
+                	boardOwnsText = "owns";
+            	} else if (attr.resident_boards === "bds") {
+                	boardOwnsText = "boards";
+            	}
+                // Format Name
+                const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
+                const concatName = nameParts.filter(p => p && String(p).trim() !== '').join(" ") || attr.USER_Name_as_given || "Unknown";
+                const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_cccupation_title, `<br>`);
+                const business = createStringIfNotNull(`<b>Business:</b> `, attr.USER_business_name_employer, `<br>`);
+    			const office = createStringIfNotNull(`<b>Business Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
+    			const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence_cityDirect, `<br>`);
+    			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
+    			const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
+    			const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
+    			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
 
-    const occupation = createStringIfNotNull(`<b>Occupation:</b> `, attr.USER_Occupation_Title, `<br>`);
-    const office = createStringIfNotNull(`<b>Office Address:</b> `, attr.USER_Office_Business_Address, `<br>`);
-    const residence = createStringIfNotNull(`<b>Residence:</b> `, attr.USER_Residence__r_, `<br>`);
-    const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
-    const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
-    const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
-    const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
-
-    // 4. Build the HTML
-    let contentHTML = `
+                let contentHTML = `
         <div class="person-detail-header">
             <h3>${concatName}</h3>
         </div>
         <div class="person-detail-body" style="padding-top: 10px;">
             ${occupation || ''}
             ${businessName || ''}
+            ${business || ''}
             ${office || ''}
             ${residence || ''}
             ${description || ''}
@@ -1362,15 +1386,16 @@ function openPeoplePanel(feature) {
             ${POC}
             <hr>
     `;
-
-    // 5. Contextual Map Link: Only add if coordinates exist
+    // 5. Contextual Map Link
     if (lon && lat) {
-    const escapedAddrForLink = streetAddress.replace(/'/g, "\\'");
-    contentHTML += `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>`;
-    contentHTML += `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>`;
-} else {
-    contentHTML += `<p style="color: #666; font-style: italic;">Zoom to point currently unavailable.</p>`;
-}
+        const escapedAddrForLink = streetAddress ? streetAddress.replace(/'/g, "\\'") : "";
+        contentHTML += `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>`;
+        if (escapedAddrForLink) {
+            contentHTML += `<br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedAddrForLink}')">View Place Info</a>`;
+        }
+    } else {
+        contentHTML += `<p style="color: #666; font-style: italic;">Zoom to point currently unavailable.</p>`;
+    }
 	
     contentHTML += `</div>`;
 
@@ -1385,10 +1410,6 @@ function openPeoplePanel(feature) {
 
     if (lon && lat && peopleLayer) {
         viewElement.view.goTo({ target: [lon, lat], zoom: 18 });
-        peopleLayer.visible = false; 
-        viewElement.view.whenLayerView(peopleLayer).then(lv => {
-            currentHighlight = lv.highlight(feature);
-        }).catch(err => console.warn("Highlight failed:", err));
     }
 }
 window.linkToPlaceFromAddress = function(address) {
@@ -1399,20 +1420,20 @@ window.linkToPlaceFromAddress = function(address) {
 
     query.where = "orig_no_street_address = '" + address.replace(/'/g, "''") + "'";
     
-    query.outFields = ["ORIG_FID", "orig_no_street_address", "OBJECTID"];
+    query.outFields = ["*"];
     query.returnGeometry = true;
 
     pointsLayer.queryFeatures(query).then(results => {
         if (results.features.length > 0) {
             const placeFeature = results.features[0];
-            const fid = placeFeature.attributes.ORIG_FID;
+            const targetPid = placeFeature.attributes.place_ID;
             const addr = placeFeature.attributes.orig_no_street_address;
 
             // 2. Switch to the Places tab
             $('#pointsCounter').tab('show');
 
             // 3. Populate the Places information using your existing function
-            queryAndDisplayPlaces(fid, addr);
+            queryAndDisplayPlaces(targetPid, addr);
             
             // 4. Highlight on map
             viewElement.view.goTo(placeFeature.geometry);
