@@ -159,6 +159,29 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
         let contentHTML = `<h3>Structures at ${originalAddress}</h3>`;
 
         if (features.length > 0) {
+            // Batch query: collect all unique addresses and check for people in a single request
+            const uniqueAddresses = [...new Set(features.map(f => 
+                [f.attributes.orig_address_no, f.attributes.orig_address_street]
+                .filter(p => p).join(" ")
+            ))].filter(addr => addr);
+            
+            let addressesWithPeople = new Set();
+            if (uniqueAddresses.length > 0) {
+                const addressFilter = uniqueAddresses
+                    .map(addr => `USER_street_number_name = '${addr.replace(/'/g, "''")}'`)
+                    .join(" OR ");
+                const countQuery = peopleLayer.createQuery();
+                countQuery.where = addressFilter;
+                countQuery.outFields = ["USER_street_number_name"];
+                countQuery.returnGeometry = false;
+                try {
+                    const peopleResults = await peopleLayer.queryFeatures(countQuery);
+                    addressesWithPeople = new Set(
+                        peopleResults.features.map(f => f.attributes.USER_street_number_name)
+                    );
+                } catch (e) { console.warn("Batch people lookup failed:", e); }
+            }
+
             for (const feature of features) {
                 const attributes = feature.attributes;
                 const y = feature.geometry.y;
@@ -176,11 +199,6 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
    					.join(" ");
                		//const contentTitle = createStringIfNotNull(`<h4>`, attributes.orig_address_no, ` `, attributes.orig_address_street,`</h4>`);
                		const targetId = `placeDetail_${attributes.place_ID}_${attributes.OBJECTID}`;
-               		
-               		const peopleQuery = peopleLayer.createQuery();
-                peopleQuery.where = "USER_Street_number_name = '" + concatAddress.replace(/'/g, "''") + "'";
-                // Check if any people exist at this specific address
-                const checkCount = await peopleLayer.queryFeatureCount(peopleQuery);
                 
 const contentTitle = `
     <a style="padding-left:0px;" 
@@ -212,7 +230,8 @@ const startOfCollapse = `<div class="collapse" id="${targetId}" data-parent="#po
         			const currAdd = createStringIfNotNull(`<b>Current Address:</b> `, currConcatAddress,`<br>`);
         			const currMuni = createStringIfNotNull(`<b>Current Municipality:</b> `,attributes.curr_city,`<br>`);
         			const mapURL = attributes.map_url;
-        			const peopleLink = checkCount > 0 ? `<br><a href="javascript:void(0)" onclick="linkToPeopleFromAddress('${escapedAddrForPeople}')">View People at this Address</a>` : "";
+        			const hasPeople = addressesWithPeople.has(concatAddress);
+        			const peopleLink = hasPeople ? `<br><a href="javascript:void(0)" onclick="linkToPeopleFromAddress('${escapedAddrForPeople}')">View People at this Address</a>` : "";
 
                     contentHTML += `
                         <div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
@@ -1245,6 +1264,8 @@ opacityInput.addEventListener('input', function() {
 });
 
 let sliderTimeout;
+let cachedMinYear = null;
+let cachedMaxYear = null;
 
 // Function to handle dual date range slider updates and debounce map query
 function updateSliders() {
@@ -1265,6 +1286,13 @@ function updateSliders() {
     // Update the displayed min/max year values
     dateMinValue.textContent = minVal;
     dateMaxValue.textContent = maxVal;
+    
+    // Skip query if date range has not changed
+    if (minVal === cachedMinYear && maxVal === cachedMaxYear) {
+        return;
+    }
+    cachedMinYear = minVal;
+    cachedMaxYear = maxVal;
     
     // Debounce the map query to avoid excessive calls while sliding
     clearTimeout(sliderTimeout);
