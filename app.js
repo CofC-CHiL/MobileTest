@@ -276,31 +276,20 @@ async function queryAndDisplayPeople(streetAddress) {
         }
     } catch (e) { console.warn("Fallback address lookup failed", e); }
 
+    
     peopleLayer.queryFeatures(query).then(results => {
         const features = results.features;
-        document.getElementById("peopleCounter").innerHTML = `People (${features.length})`;
         let contentHTML = `<h3>People at ${streetAddress}</h3>`;
 
         if (features.length > 0) {
-        	peopleCount= features.length;
-            features.forEach((feature) => {
+        	for (const feature of features) {
                 const attr = feature.attributes;
-                const targetId = `personDetail_${attr.OBJECTID}`;
-                
-                let lon = null, lat = null;
-                
-                // Use person's geometry if it exists
-                if (feature.geometry) {
-                    const lngLat = webMercatorUtils.xyToLngLat(feature.geometry.x, feature.geometry.y);
-                    lon = lngLat[0];
-                    lat = lngLat[1];
-                } 
-                // Otherwise, use the building's geometry we found in Step 1
-                else if (fallbackCoords) {
-                    lon = fallbackCoords.lon;
-                    lat = fallbackCoords.lat;
-                }
-            	
+                const y = feature.geometry.y;
+                	const x = feature.geometry.x;
+                	const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
+                	
+                const targetId = `placeDetail_${attr.USER_cd_1888_ID}`;
+                	
             	let boardOwnsText = '';
             	if (attr.resident_boards === "r") {
                 	boardOwnsText = "owns";
@@ -323,7 +312,7 @@ async function queryAndDisplayPeople(streetAddress) {
 
                 const contentTitle = `
     <a style="padding-left:0px;" 
-       onclick="highlightPointByCoords(${lon}, ${lat})" 
+       onclick="highlightPointByCoords(${long}, ${lat})" 
        class="dropdown-toggle btn d-flex justify-content-between align-items-center" 
        role="button" 
        data-toggle="collapse" 
@@ -332,11 +321,13 @@ async function queryAndDisplayPeople(streetAddress) {
         <h4>${concatName}</h4>
     </a>
 `;
+
 const startOfCollapse = `<div class="collapse" id="${targetId}" data-parent="#pointsInfo">`;
 					const endOfCollapse = `</div>`;
                 contentHTML += `
-				${contentTitle}
-        		${startOfCollapse}
+				<div class="pointsResultList" style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 10px;">
+                            ${contentTitle}
+        					${startOfCollapse}
                 ${occupation || ''}
                 ${businessName || ''}
                 ${office || ''}
@@ -344,23 +335,21 @@ const startOfCollapse = `<div class="collapse" id="${targetId}" data-parent="#po
                 ${description || ''}
                 ${boardRent || ''}
                 ${POC || ''}
-                ${(lon !== null && lat !== null) 
-                    ? `<a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${lon}, ${lat}], zoom: 19})">Zoom to Person</a>` 
-                    : '<i style="color:gray;">Map location unavailable</i>'}
-                <br><a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedLinkAddr}')">View Place Info</a>
-                ${endOfCollapse}
-            </div>
-        </div>
-    </div>`;
-            });
-        } else {
-            contentHTML += "<p>No people records found for this address.</p>";
-        }
-
+                <a href="javascript:void(0)" onclick="window.SHOC_VIEW.view.goTo({center: [${long}, ${lat}], zoom: 19}); highlightPointByCoords(${long}, ${lat}); return false;">Zoom to Person</a><br>
+                <a href="javascript:void(0)" onclick="linkToPlaceFromAddress('${escapedLinkAddr}')">View Place Info</a>
+                ${endOfCollapse}</div>
+                    `;
+                };
+            } else {
+                contentHTML += "<p>No matching records found.</p>";
+            }
         document.getElementById('personInfo').innerHTML = contentHTML;
         // Update the tab counter
         document.getElementById("peopleCounter").innerHTML = `People (${features.length})`;
-    });
+    })
+        .catch(error => {
+        console.error("Error querying pointsLayer:", error);
+        });
 }
 // Function to highlight a visible point by coordinates (used by Zoom link)
 window.highlightPointByCoords = function(long, lat) {
