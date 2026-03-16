@@ -617,8 +617,10 @@ reactiveUtils.watch(
     
     // Listener for typing in the search bar
     searchBar.addEventListener('input', () => {
-        // debounceQuery already calls queryPoints and queryPeople internally
-        debounceQuery(viewElement.extent);
+    	const text = searchBar.value.trim();
+        debounceQuery(viewElement.extent); // Debounced extent-based refresh (queryCount)
+        queryPoints(text);  // Immediate text search for Places
+    	queryPeople(text);   // Immediate text search for People
         // Show/expand sidebar when search input starts
         featureNode.style.display = "block";
         if (window.innerWidth < 850) {
