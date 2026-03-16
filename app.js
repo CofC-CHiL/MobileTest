@@ -509,7 +509,7 @@ reactiveUtils.watch(
             queryCount(extent); // Queries historic maps in the current extent
             queryPoints(searchBar.value.trim()); // Re-query points based on extent/search
             queryPeople(searchBar.value.trim()); 
-        }, 500); // Wait 500ms after the user stops panning/zooming
+        }, 750); // Wait 750ms after the user stops panning/zooming
     }
     
     // === Points Layer Initialization ===
@@ -598,10 +598,8 @@ reactiveUtils.watch(
     
     // Listener for typing in the search bar
     searchBar.addEventListener('input', () => {
-    	const text = searchBar.value.trim();
+        // debounceQuery already calls queryPoints and queryPeople internally
         debounceQuery(viewElement.extent);
-        queryPoints(text);
-    	queryPeople(text);
         // Show/expand sidebar when search input starts
         featureNode.style.display = "block";
         if (window.innerWidth < 850) {
@@ -1304,11 +1302,11 @@ function updateSliders() {
         if (lastSelectedOrigFid !== null && lastSelectedAddress !== null) {
             queryAndDisplayPlaces(lastSelectedOrigFid, lastSelectedAddress);
         }
-    }, 300);
+    }, 400);
 }
 // Listeners for both date slider handles
-dateSlider_l.addEventListener('input', updateSliders);
-dateSlider_r.addEventListener('input', updateSliders);
+dateSlider_l.addEventListener('input', updateSliders, { passive: true });
+dateSlider_r.addEventListener('input', updateSliders, { passive: true });
 
 function openPeoplePanel(feature) {
     if (!feature || !feature.attributes) return;
