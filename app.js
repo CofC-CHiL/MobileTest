@@ -69,7 +69,7 @@ function handlePointSelection(objectId) {
     // Query the pointsLayer (index layer) by OBJECTID
     pointsLayer.queryFeatures({
         where: `OBJECTID = ${objectId}`,
-        outFields: ["*"],
+        outFields: ["place_ID", "orig_no_street_address", "OBJECTID"],
         returnGeometry: true
     }).then(results => {
         if (results.features.length > 0) {
@@ -148,7 +148,7 @@ function queryAndDisplayPlaces(origFidValue, originalAddress) {
     // 2. Query for the attributes to fill the sidebar
     const query = placesLayer.createQuery();
     query.where = finalWhereClause;
-    query.outFields = ["*"];
+    query.outFields = ["place_ID", "OBJECTID", "orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "function_second", "place_descript", "source_year", "place_source", "max_stories", "curr_address_no", "curr_address_street", "curr_city", "map_url"];
     query.returnGeometry = true;
 
     document.getElementById('pointsInfo').innerHTML = `<h3>${originalAddress}</h3><p>Loading records...</p>`;
@@ -256,7 +256,7 @@ async function queryAndDisplayPeople(streetAddress) {
 
     const query = peopleLayer.createQuery();
     query.where = where;
-    query.outFields = ["*"];
+    query.outFields = ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"];
     query.returnGeometry = true;
     query.outSpatialReference = { wkid: 102100 };
 
@@ -266,7 +266,7 @@ async function queryAndDisplayPeople(streetAddress) {
     try {
         const addrQuery = pointsLayer.createQuery();
         addrQuery.where = `orig_no_street_address = '${sanitizedAddress}'`;
-        addrQuery.outFields = ["*"];
+        addrQuery.outFields = ["orig_no_street_address", "place_ID", "OBJECTID"];
         addrQuery.returnGeometry = true;
         const addrResults = await pointsLayer.queryFeatures(addrQuery);
         if (addrResults.features.length > 0) {
@@ -517,17 +517,15 @@ reactiveUtils.watch(
     // Initialize the FeatureLayer for the places_index points
     pointsLayer = new FeatureLayer({
     	url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
-    	outFields: ["*"],
+    	outFields: ["orig_no_street_address", "place_ID", "OBJECTID"],
     	gdbVersion: null,
-        //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-        //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
         renderer: points,
     });
     
     // Initialize the FeatureLayer for the places results
    placesLayer = new FeatureLayer({
     url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-    outFields: ["*"],
+    outFields: ["place_ID", "OBJECTID", "orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "function_second", "place_descript", "source_year", "place_source", "max_stories", "curr_address_no", "curr_address_street", "curr_city", "map_url"],
     definitionExpression: "1=0",
     renderer: {
         type: "simple",
@@ -547,7 +545,7 @@ reactiveUtils.watch(
 
 	peopleLayer = new FeatureLayer({
     url: "https://lyre.cofc.edu/server/rest/services/shoc/DBO_people_cd1888/FeatureServer/64",
-    outFields: ["*"],
+    outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
     visible: false,
     renderer: {
         type: "simple",
@@ -926,7 +924,7 @@ function queryPoints(searchText) {
             // 4. Query the pointsLayer (index layer) to get the point addresses and OBJECTIDs
             return pointsLayer.queryFeatures({
                 where: uniquePlaceIdsFilter,
-                outFields: ["*"],
+                outFields: ["orig_no_street_address", "place_ID", "OBJECTID"],
                 returnGeometry: false
             });
         })
@@ -1005,7 +1003,7 @@ function queryPeople(searchText) {
 
     const peopleQuery = {
         where: searchFilter,
-        outFields: ["*"],
+        outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
         returnGeometry: true,
         returnDistinctValues: false
     };
@@ -1200,9 +1198,7 @@ function displayResults(results) {
     // Re-add the points layer on top of the tile layer (at index 1)
     const newPointsLayer = new FeatureLayer({
         url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
-    	outFields: ["*"],
-        //url: "https://lyre.cofc.edu/server/rest/services/shoc/places/FeatureServer/0",
-        //outFields: ["orig_address_no", "orig_address_street", "orig_city", "prime_material", "add_material", "function_prime", "place_descript", "place_source", "source_year", "OBJECTID", "max_stories","function_second", "curr_address_no","curr_address_street","curr_city", "bldg_ID","map_url","place_ID"],
+    	outFields: ["orig_no_street_address", "place_ID", "OBJECTID"],
         renderer: points, // Reusing the defined renderer
         id: "pointsLayer", // Give the layer an ID for easy referencing
         visible: pointsSwitch.checked, 
@@ -1409,7 +1405,7 @@ window.linkToPlaceFromAddress = function(address) {
 
     query.where = "orig_no_street_address = '" + address.replace(/'/g, "''") + "'";
     
-    query.outFields = ["*"];
+    query.outFields = ["orig_no_street_address", "place_ID", "OBJECTID"];
     query.returnGeometry = true;
 
     pointsLayer.queryFeatures(query).then(results => {
