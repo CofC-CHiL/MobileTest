@@ -1160,13 +1160,6 @@ function displayResults(results) {
         viewElement.map.remove(tileLayer);
         mapsInfo.innerHTML = "No maps selected"
     }
-    
-    // Remove the points layer temporarily for correct Z-ordering
-    const existingPointsLayer = viewElement.map.layers.find(layer => layer.url && layer.url.includes("places"));
-    if (existingPointsLayer) {
-    	const isPointsVisible = existingPointsLayer.visible; 
-        viewElement.map.remove(existingPointsLayer);
-    }
 
     // Create the new TileLayer with current opacity setting
     const initialOpacity = parseFloat(opacityInput.value) / 100;
@@ -1177,6 +1170,12 @@ function displayResults(results) {
 
     // Add the tile layer at index 0 (bottom)
     viewElement.map.add(tileLayer, 0);
+    
+    // Reorder existing layers instead of recreating them
+    viewElement.map.reorder(pointsLayer, 1);
+    viewElement.map.reorder(placesLayer, 2);
+    viewElement.map.reorder(peopleLayer, 3);
+    pointsLayer.visible = pointsSwitch.checked;
     
     //Concat date
     const m = Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(mapPrefix.mapmonth));
@@ -1218,16 +1217,6 @@ function displayResults(results) {
         <a href="javascript:void(0)" onclick="window.zoomToTileLayerExtent(); return false;">Zoom to Map Extent</a>
         `;
 
-    // Re-add the points layer on top of the tile layer (at index 1)
-    const newPointsLayer = new FeatureLayer({
-        url: "https://lyre.cofc.edu/server/rest/services/shoc/places_index/FeatureServer/0",
-    	outFields: ["orig_no_street_address", "place_ID", "OBJECTID"],
-        renderer: points, // Reusing the defined renderer
-        id: "pointsLayer", // Give the layer an ID for easy referencing
-        visible: pointsSwitch.checked, 
-    });
-    viewElement.map.add(newPointsLayer, 1);
-    
     // Define the symbol for the map extent boundary graphic
     const symbol = {
         type: "simple-fill",
@@ -1247,7 +1236,6 @@ function displayResults(results) {
     viewElement.closePopup();
     viewElement.graphics.removeAll(); // Clear previous map boundary
     viewElement.graphics.addMany(results.features); // Add the new map boundary graphic
-    pointsLayer = newPointsLayer;
     
     trackLoadingStatus(pointsLayer);
 }
