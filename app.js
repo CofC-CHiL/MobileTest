@@ -829,6 +829,7 @@ function queryCount(extent) {
             const seenYears = new Set();
 
             // 3. Create and append sorted options to the results list
+            const fragment = document.createDocumentFragment();
             sortedFeatures.forEach((feature) => {
                 const year = feature.attributes.mapyear;
                 const title = feature.attributes.title;
@@ -843,8 +844,9 @@ function queryCount(extent) {
                 // Value is the SQL condition for the specific service URL
                 option.setAttribute("value", `service_url = '${service_url}'`);
                 option.setAttribute("class", `list-group-item`);
-                resultsList.appendChild(option);
+                fragment.appendChild(option);
             });
+            resultsList.appendChild(fragment);
         });
 };
 
@@ -949,7 +951,8 @@ function queryPoints(searchText) {
                 return addressA.localeCompare(addressB);
             });
             
-            // 5. Populate the list
+            // 5. Populate the list using DocumentFragment for better performance
+            const fragment = document.createDocumentFragment();
             sortedFeatures.forEach(feature => {
                 const attributes = feature.attributes;
                 const listItem = document.createElement("li");
@@ -960,8 +963,9 @@ function queryPoints(searchText) {
                 listItem.value = attributes.OBJECTID;
                 listItem.textContent = fullTitle;
                 listItem.className = "list-group-item";
-                pointListElement.appendChild(listItem);
+                fragment.appendChild(listItem);
             });
+            pointListElement.appendChild(fragment);
             
         })
         .catch(error => {
@@ -1017,6 +1021,7 @@ function queryPeople(searchText) {
             return;
         }
 
+        const fragment = document.createDocumentFragment();
         features.forEach((feature) => {
             const attr = feature.attributes;
             const nameParts = [attr.USER_Salutation, attr.USER_Given_Name, attr.USER_Surname];
@@ -1034,8 +1039,9 @@ function queryPeople(searchText) {
                 li.classList.add('active');
         		openPeoplePanel(feature);
     		});
-            peopleListElement.appendChild(li);
+            fragment.appendChild(li);
         });
+        peopleListElement.appendChild(fragment);
     }).catch(error => console.error("Error querying people:", error));
 }
 //	Listener for clicking the source map link in the points info tab
