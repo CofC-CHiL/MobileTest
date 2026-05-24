@@ -1,0 +1,5 @@
+# Student ingestion pipeline files (large datasets)
+extras/*.ipynb
+extras/*.csv
+extras/*.nt
+extras/*.zip
