@@ -275,7 +275,7 @@ async function queryAndDisplayPeople(streetAddress) {
 
     const query = peopleLayer.createQuery();
     query.where = where;
-    query.outFields = ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"];
+    query.outFields = ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"];
     query.returnGeometry = true;
     query.outSpatialReference = { wkid: 102100 };
 
@@ -335,7 +335,7 @@ async function queryAndDisplayPeople(streetAddress) {
     			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
     			const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
     			const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
-    			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
+    			const businessName = '';
 
                 const contentTitle = `
     <a style="padding-left:0px;" 
@@ -572,7 +572,7 @@ reactiveUtils.watch(
 
 	peopleLayer = new FeatureLayer({
     url: "https://lyre.cofc.edu/server/rest/services/shoc/DBO_people_cd1888/FeatureServer/64",
-    outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
+    outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
     visible: false,
     renderer: {
         type: "simple",
@@ -1034,7 +1034,7 @@ function queryPeople(searchText) {
 
     const peopleQuery = {
         where: searchFilter,
-        outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_Business_Name", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
+        outFields: ["USER_Salutation", "USER_Given_Name", "USER_Surname", "USER_Name_as_given", "USER_cccupation_title", "USER_business_name_employer", "USER_Office_Business_Address", "USER_Residence_cityDirect", "USER_Other_desription", "USER_resident_boards", "USER_POC", "USER_street_number_name", "USER_cd_1888_ID", "OBJECTID"],
         returnGeometry: true,
         returnDistinctValues: false
     };
@@ -1384,7 +1384,7 @@ function openPeoplePanel(feature) {
     			const description = createStringIfNotNull(`<b>Other Description:</b> `, attr.USER_Other_desription, `<br>`);
     			const boardRent = boardOwnsText ? `<b>Boards or Owns:</b> ${boardOwnsText}<br>` : '';
     			const POC = attr.USER_POC ? `<b>Person of Color:</b> True<br>` : '';
-    			const businessName = createStringIfNotNull(`<b>Business Name:</b> `, attr.USER_Business_Name, `<br>`);
+    			const businessName = '';
 
                 let contentHTML = `
         <div class="person-detail-header">
