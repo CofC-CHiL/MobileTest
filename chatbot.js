@@ -305,13 +305,62 @@ GUIDELINES:
         return reply;
     }
 
+    // ── Helpers for word-boundary matching ───────────────────
+    // Returns true only if `word` appears as a whole word (not as a
+    // substring of another word, e.g. "how" inside "show").
+    function hasWord(text, word) {
+        return new RegExp(`\\b${word}\\b`, "i").test(text);
+    }
+    function hasAnyWord(text, words) {
+        return words.some(w => hasWord(text, w));
+    }
+
+    // Try to extract a street address like "106 Coming Street" or
+    // "12 King St" from a message. Returns the address string or null.
+    function extractAddress(text) {
+        const m = text.match(/\b(\d{1,5}\s+[A-Za-z][A-Za-z\s]{1,30}?\b(?:street|st|road|rd|ave|avenue|blvd|boulevard|lane|ln|drive|dr|way|place|pl|court|ct|alley|row))\b/i);
+        return m ? m[1].trim() : null;
+    }
+
     // ── Offline / No-API-Key Fallback ────────────────────────
     function handleOfflineResponse(msg) {
         const lower = msg.toLowerCase();
 
-        if (lower.includes("tour") || lower.includes("help") || lower.includes("how")) {
+        // ── 1. Address-specific queries ("106 Coming Street", "who lived at…") ──
+        const address = extractAddress(msg);
+        if (address) {
+            // If they're asking about people at an address
+            if (hasAnyWord(lower, ["who", "lived", "live", "anyone", "person", "people", "resident", "residents", "occupy", "occupied"])) {
+                return `Let me search for people and places at **${address}**. I'll pull up the search results for you!\n\n[ACTION:SEARCH:${address}]`;
+            }
+            // Otherwise just search the address
+            return `Searching for **${address}** on the map!\n\n[ACTION:SEARCH:${address}]`;
+        }
+
+        // ── 2. "Who lived at" without a parseable address ──
+        if (hasAnyWord(lower, ["who", "lived", "anyone"]) && hasAnyWord(lower, ["at", "on", "street", "st", "address"])) {
+            // Try to extract whatever comes after "at" or "on"
+            const afterAt = msg.match(/(?:at|on)\s+(.{3,})/i);
+            if (afterAt) {
+                const searchTerm = afterAt[1].replace(/[?.!]+$/, "").trim();
+                return `Let me search for **${searchTerm}** to find who may have lived there!\n\n[ACTION:SEARCH:${searchTerm}]`;
+            }
+            return "I can look up residents from the **1888 City Directory**! Just tell me a street address (e.g. \"106 Coming Street\") and I'll search for it.";
+        }
+
+        // ── 3. People / 1888 directory intent ──
+        // Check this BEFORE the generic "show" / "search" handlers so
+        // "show people" doesn't fall through to something else.
+        if (hasAnyWord(lower, ["people", "person", "persons", "resident", "residents", "1888", "directory"])) {
+            return "The **People** layer contains entries from the **1888 Charleston City Directory**. You can search by name, occupation, or street address. Let me switch to the People tab!\n\n[ACTION:TAB:people]";
+        }
+
+        // ── 4. Tour / help (word-boundary so "show" ≠ "how") ──
+        if (hasWord(lower, "tour") || (hasWord(lower, "help") && !hasWord(lower, "search")) || hasWord(lower, "how to") || (hasWord(lower, "how") && hasAnyWord(lower, ["use", "do", "does", "work", "works", "start"]))) {
             return "Let me start the guided tour for you! It will walk you through all the features of the map.\n\n[ACTION:TOUR]";
         }
+
+        // ── 5. Specific well-known streets ──
         if (lower.includes("king street") || lower.includes("king st")) {
             return "Let me search for **King Street** on the map for you!\n\n[ACTION:SEARCH:King Street]";
         }
@@ -321,46 +370,86 @@ GUIDELINES:
         if (lower.includes("broad street") || lower.includes("broad st")) {
             return "Searching for **Broad Street**…\n\n[ACTION:SEARCH:Broad Street]";
         }
-        if (lower.includes("search") || lower.includes("find") || lower.includes("look")) {
-            const terms = msg.replace(/search|find|look|for|up|me|the|show|can you/gi, "").trim();
+        if (lower.includes("church street") || lower.includes("church st")) {
+            return "Searching for **Church Street**…\n\n[ACTION:SEARCH:Church Street]";
+        }
+        if (lower.includes("tradd street") || lower.includes("tradd st")) {
+            return "Searching for **Tradd Street**…\n\n[ACTION:SEARCH:Tradd Street]";
+        }
+
+        // ── 6. Generic search / find / show intent ──
+        if (hasAnyWord(lower, ["search", "find", "look", "show", "where"])) {
+            const terms = msg.replace(/\b(search|find|look|show|where|for|up|me|the|can|you|is|are|was|were|it|a|an)\b/gi, "").trim();
             if (terms.length > 1) {
                 return `Searching for **${terms}**…\n\n[ACTION:SEARCH:${terms}]`;
             }
             return "What would you like me to search for? You can ask about a street, a building type, a person's name, or a material like 'brick' or 'wood'.";
         }
-        if (lower.includes("people") || lower.includes("person") || lower.includes("1888")) {
-            return "The **People** layer contains entries from the **1888 Charleston City Directory**. You can search by name, occupation, or street address. Let me switch to the People tab!\n\n[ACTION:TAB:people]";
+
+        // ── 7. Map date filtering ──
+        if (hasWord(lower, "map") || hasWord(lower, "maps")) {
+            const yearMatch = lower.match(/\b(1[6-9]\d{2})\b/);
+            if (yearMatch) {
+                const decade = Math.floor(parseInt(yearMatch[1]) / 100) * 100;
+                return `Let me filter the date range to show historic maps from the ${decade}s!\n\n[ACTION:DATE:${decade},${decade + 99}]`;
+            }
+            if (lower.includes("18th") || lower.includes("1800")) {
+                return "Let me filter the date range to show historic maps from the 1800s!\n\n[ACTION:DATE:1800,1899]";
+            }
+            if (lower.includes("17th") || lower.includes("1700")) {
+                return "Let me filter the date range to show historic maps from the 1700s!\n\n[ACTION:DATE:1670,1799]";
+            }
+            if (lower.includes("19th") || lower.includes("1900")) {
+                return "Let me filter the date range to show historic maps from the 1900s!\n\n[ACTION:DATE:1900,1950]";
+            }
+            return "The **Maps** tab shows georeferenced historic maps that overlay onto the modern map. Use the **Date Range** slider (1670–1950) to filter by era, or search for a map title. Let me switch to the Maps tab!\n\n[ACTION:TAB:maps]";
         }
-        if (lower.includes("map") && (lower.includes("1800") || lower.includes("18th") || lower.includes("19th"))) {
-            return "Let me filter the date range to show historic maps from the 1800s!\n\n[ACTION:DATE:1800,1899]";
-        }
-        if (lower.includes("what is") && lower.includes("shoc")) {
+
+        // ── 8. What is SHOC? ──
+        if ((lower.includes("what is") || lower.includes("what's") || lower.includes("tell me about")) && lower.includes("shoc")) {
             return "**SHOC** (Spatial History of Charleston) is a deep-mapping project by the College of Charleston. It overlays georeferenced historic maps onto a modern base map and connects them with detailed records of **places** and **people** from Charleston's past (1670–1950).";
         }
-        if (lower.includes("zoom") && lower.includes("charleston")) {
+
+        // ── 9. Zoom to Charleston ──
+        if (hasWord(lower, "zoom") && lower.includes("charleston")) {
             return "Zooming to the heart of historic Charleston!\n\n[ACTION:ZOOM:-79.931,32.776,16]";
         }
-        if (lower.includes("opacity") || lower.includes("transparent")) {
+
+        // ── 10. Opacity / transparency ──
+        if (lower.includes("opacity") || lower.includes("transparent") || lower.includes("transparency")) {
             return "You can adjust the historic map transparency using the **Historic Map Opacity** slider in the top navigation bar. Slide it left to see more of the modern base map underneath.";
         }
 
-        // Default
-        return "I can help you explore the SHOC map! Try asking me to:\n- **Search** for a street or person\n- **Show maps** from a specific era\n- **Start the tour** to learn the interface\n- **Explain** what data is available\n\nWhat would you like to know?";
+        // ── 11. Greetings ──
+        if (hasAnyWord(lower, ["hi", "hello", "hey", "yo", "sup", "greetings"])) {
+            return "Hello! 👋 I can help you explore Charleston's spatial history. Try asking about a street address, a person from the 1888 directory, or how to use the map!";
+        }
+
+        // ── 12. Thanks ──
+        if (hasAnyWord(lower, ["thanks", "thank", "thx", "ty"])) {
+            return "You're welcome! Let me know if there's anything else you'd like to explore on the map. 😊";
+        }
+
+        // ── Default ──
+        return "I can help you explore the SHOC map! Try asking me to:\n- **Search** for a street or address (e.g. \"106 Coming Street\")\n- **Who lived** at a specific address\n- **Show maps** from a specific era (e.g. \"maps from 1800s\")\n- **Start the tour** to learn the interface\n\nWhat would you like to know?";
     }
 
     // ── Generate Follow-up Suggestions ────────────────────────
     function generateFollowUps(reply) {
         const lower = reply.toLowerCase();
-        if (lower.includes("search") || lower.includes("king") || lower.includes("street")) {
-            return ["Show people there", "Maps from 1800s", "What is SHOC?"];
+        if (lower.includes("search") || lower.includes("street")) {
+            return ["Who lived at 106 Coming St?", "Maps from 1800s", "What is SHOC?"];
         }
         if (lower.includes("tour")) {
-            return ["Search for a place", "Show me people data", "Maps from 1700s"];
+            return ["Search 42 Broad Street", "People from 1888", "Show maps"];
         }
-        if (lower.includes("people") || lower.includes("1888")) {
-            return ["Search for a name", "Show maps from 1888", "What streets are available?"];
+        if (lower.includes("people") || lower.includes("1888") || lower.includes("directory")) {
+            return ["Search for a name", "Show maps from 1888", "Search King Street"];
         }
-        return ["Search for a place", "Show historic maps", "Start the tour", "What is SHOC?"];
+        if (lower.includes("map")) {
+            return ["Search for a place", "People from 1888", "What is SHOC?"];
+        }
+        return ["Search 106 Coming Street", "Show maps from 1800s", "Start the tour", "What is SHOC?"];
     }
 
     // ── Initialize on DOM Ready ───────────────────────────────
