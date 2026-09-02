@@ -303,10 +303,18 @@ async function queryAndDisplayPeople(streetAddress) {
         if (features.length > 0) {
         	for (const feature of features) {
                 const attr = feature.attributes;
-                const y = feature.geometry.y;
-                	const x = feature.geometry.x;
-                	const [long, lat] = webMercatorUtils.xyToLngLat(x, y);
-                	
+                let long = null, lat = null;
+                if (feature.geometry) {
+                    const y = feature.geometry.y;
+                    const x = feature.geometry.x;
+                    const lngLat = webMercatorUtils.xyToLngLat(x, y);
+                    long = lngLat[0];
+                    lat = lngLat[1];
+                } else if (fallbackCoords) {
+                    long = fallbackCoords.lon;
+                    lat = fallbackCoords.lat;
+                }
+                
                 const targetId = `placeDetail_${attr.USER_cd_1888_ID}`;
                 	
             	let boardOwnsText = '';
