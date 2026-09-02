@@ -7,9 +7,18 @@
     "use strict";
 
     // ── Gemini Configuration ──────────────────────────────────
-    const GEMINI_API_KEY = ""; // User must supply key
     const GEMINI_MODEL = "gemini-2.0-flash";
     const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=`;
+    const STORAGE_KEY = "shoc_gemini_api_key";
+
+    // Read API key from localStorage (user-supplied, never leaves the browser)
+    function getApiKey() {
+        return (localStorage.getItem(STORAGE_KEY) || "").trim();
+    }
+    function setApiKey(key) {
+        if (key) localStorage.setItem(STORAGE_KEY, key.trim());
+        else localStorage.removeItem(STORAGE_KEY);
+    }
 
     // ── System prompt (SHOC context) ─────────────────────────
     const SYSTEM_PROMPT = `You are SHOC Assistant, a helpful and concise AI guide for the Spatial History of Charleston (SHOC) interactive map website.
@@ -71,7 +80,29 @@ GUIDELINES:
                     <div class="chat-title">SHOC Assistant</div>
                     <div class="chat-subtitle">AI-powered map guide</div>
                 </div>
-                <button id="shoc-chat-close" aria-label="Close chat">&times;</button>
+                <div class="chat-header-btns">
+                    <button id="shoc-chat-settings-btn" aria-label="Settings" title="Settings">⚙</button>
+                    <button id="shoc-chat-close" aria-label="Close chat">&times;</button>
+                </div>
+            </div>
+            <div id="shoc-chat-disclaimer">
+                <span class="disclaimer-icon">🔒</span>
+                <span class="disclaimer-text">
+                    <strong>Privacy:</strong> No data is collected or stored by SHOC. Chat history exists only in your browser session and is cleared when you close the page.
+                    If you enable AI mode, your messages are sent to <a href="https://ai.google.dev/gemini-api/terms" target="_blank">Google's Gemini API</a> and subject to their terms.
+                </span>
+                <button class="disclaimer-dismiss" aria-label="Dismiss" title="Dismiss">&times;</button>
+            </div>
+            <div id="shoc-chat-settings">
+                <h4>⚙ AI Settings</h4>
+                <p>Enter your own Google Gemini API key to unlock full AI-powered responses. Your key is stored <strong>only in your browser</strong> (localStorage) and is never sent to SHOC servers.</p>
+                <p><a href="https://aistudio.google.com/app/apikey" target="_blank">Get a free API key from Google AI Studio →</a></p>
+                <div class="settings-key-row">
+                    <input id="shoc-api-key-input" type="password" placeholder="Paste your API key here…" autocomplete="off" />
+                    <button id="shoc-api-key-save">Save</button>
+                    <button id="shoc-api-key-clear">Clear</button>
+                </div>
+                <div class="settings-status" id="shoc-api-key-status"></div>
             </div>
             <div id="shoc-chat-messages"></div>
             <div class="chat-suggestions" id="shoc-chat-suggestions"></div>
@@ -90,6 +121,53 @@ GUIDELINES:
         document.getElementById("shoc-chat-input").addEventListener("keydown", (e) => {
             if (e.key === "Enter") sendMessage();
         });
+
+        // Disclaimer dismiss
+        const disclaimer = document.getElementById("shoc-chat-disclaimer");
+        disclaimer.querySelector(".disclaimer-dismiss").addEventListener("click", () => {
+            disclaimer.style.display = "none";
+            sessionStorage.setItem("shoc_disclaimer_dismissed", "1");
+        });
+        // Hide if already dismissed this session
+        if (sessionStorage.getItem("shoc_disclaimer_dismissed") === "1") {
+            disclaimer.style.display = "none";
+        }
+
+        // Settings panel
+        const settingsBtn = document.getElementById("shoc-chat-settings-btn");
+        const settingsPanel = document.getElementById("shoc-chat-settings");
+        const keyInput = document.getElementById("shoc-api-key-input");
+        const keyStatus = document.getElementById("shoc-api-key-status");
+
+        settingsBtn.addEventListener("click", () => {
+            settingsPanel.classList.toggle("open");
+            updateKeyStatus();
+        });
+
+        document.getElementById("shoc-api-key-save").addEventListener("click", () => {
+            const key = keyInput.value.trim();
+            if (!key) return;
+            setApiKey(key);
+            keyInput.value = "";
+            updateKeyStatus();
+            addBotMessage("✅ **AI mode enabled!** Your API key has been saved to your browser. I'll now use Google Gemini to answer your questions with full context about the SHOC project.");
+        });
+
+        document.getElementById("shoc-api-key-clear").addEventListener("click", () => {
+            setApiKey(null);
+            keyInput.value = "";
+            updateKeyStatus();
+            addBotMessage("🔑 API key removed. I'll continue working in offline mode with built-in responses.");
+        });
+
+        function updateKeyStatus() {
+            const hasKey = !!getApiKey();
+            keyStatus.textContent = hasKey
+                ? "✓ API key is saved — AI mode active"
+                : "No API key set — using offline mode";
+            keyStatus.className = hasKey ? "settings-status active" : "settings-status";
+        }
+        updateKeyStatus();
 
         // Welcome message
         addBotMessage("👋 Hi! I'm the **SHOC Assistant**. I can help you explore Charleston's spatial history.\n\nTry asking about a place, a person from the 1888 directory, or how to use the map!");
@@ -268,7 +346,8 @@ GUIDELINES:
 
     // ── Call Gemini API ───────────────────────────────────────
     async function callGemini(userMessage) {
-        if (!GEMINI_API_KEY) {
+        const apiKey = getApiKey();
+        if (!apiKey) {
             return handleOfflineResponse(userMessage);
         }
 
@@ -284,7 +363,7 @@ GUIDELINES:
             }
         };
 
-        const res = await fetch(GEMINI_URL + GEMINI_API_KEY, {
+        const res = await fetch(GEMINI_URL + apiKey, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body)

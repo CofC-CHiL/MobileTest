@@ -206,6 +206,131 @@
     border-color: var(--tertiary-color);
 }
 
+/* ---------- Privacy Disclaimer ---------- */
+#shoc-chat-disclaimer {
+    background: #f0ede6;
+    border-bottom: 1px solid #ddd;
+    padding: 10px 14px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #555;
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+#shoc-chat-disclaimer .disclaimer-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+    margin-top: 1px;
+}
+#shoc-chat-disclaimer .disclaimer-text a {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+#shoc-chat-disclaimer .disclaimer-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #999;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    flex-shrink: 0;
+}
+#shoc-chat-disclaimer .disclaimer-dismiss:hover { color: #555; }
+
+/* ---------- Header Buttons ---------- */
+.chat-header-btns {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+#shoc-chat-settings-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: .75;
+    transition: opacity .15s;
+}
+#shoc-chat-settings-btn:hover { opacity: 1; background: rgba(255,255,255,.15); }
+
+/* ---------- Settings Panel ---------- */
+#shoc-chat-settings {
+    display: none;
+    padding: 14px;
+    background: #f7f7f8;
+    border-bottom: 1px solid #e5e5e5;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: #333;
+}
+#shoc-chat-settings.open { display: block; }
+#shoc-chat-settings h4 {
+    margin: 0 0 8px 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-dark);
+}
+#shoc-chat-settings p {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #666;
+}
+#shoc-chat-settings p a {
+    color: var(--primary-color);
+}
+.settings-key-row {
+    display: flex;
+    gap: 6px;
+}
+#shoc-api-key-input {
+    flex: 1;
+    border: 1px solid #d5d5d5;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: 'Inter', monospace;
+    outline: none;
+}
+#shoc-api-key-input:focus { border-color: var(--primary-color); }
+#shoc-api-key-save {
+    border: none;
+    border-radius: 6px;
+    background: var(--primary-color);
+    color: #fff;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background .15s;
+}
+#shoc-api-key-save:hover { background: #4a1018; }
+#shoc-api-key-clear {
+    border: 1px solid #d5d5d5;
+    border-radius: 6px;
+    background: #fff;
+    color: #666;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .15s;
+}
+#shoc-api-key-clear:hover { background: #f0f0f0; }
+.settings-status {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888;
+}
+.settings-status.active { color: #2a7d3f; }
+
 /* ---------- Mobile ---------- */
 @media (max-width: 480px) {
     #shoc-chat-window {
